@@ -1,0 +1,9 @@
+admin/pass
+2
+User1;pass1;cliente
+User2;pass2;administrador
+bvl;stock_bvl_2;10.000000
+bvl;stock_bvl_3;10.000000
+nyse;stock_nyse_1;10.000000
+nyse;stock_nyse_2;10.000000
+nyse;stock_nyse_3;10.000000
