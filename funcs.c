@@ -373,7 +373,6 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
         {
             // qual é a diferença, SAIR DO SERVER
             printf("[SERVER] Quitting...\n");
-            killServers();
             break;
         }
         else
@@ -391,16 +390,18 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
         erro("Erro no sendto");
     }
     close(s);
+    killServers();
     exit(0);
     return 0;
 }
 
+// TODO: DOESNT WORK
 void killServers() {
     printf("Killing servers: %d %d\n", tcpServerPID, udpServerPID);
     if (tcpServerPID > 0)
-        kill(tcpServerPID, SIGTERM);
+        kill(tcpServerPID, SIGKILL);
     if (udpServerPID > 0)
-        kill(udpServerPID, SIGTERM);
+        kill(udpServerPID, SIGKILL);
 }
 
 void erro(char *s)
