@@ -104,6 +104,9 @@ int main(int argc, char *argv[])
         printf("Welcome %s\n - %s", username, type);
         break;
       }
+
+      //TODO: check if jornalista, and then write new topics with the command "CREATE_TOPIC"
+
     }
   }
 

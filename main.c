@@ -121,15 +121,12 @@ int main(int argc, char *argv[])
             // read line
             char *id = strtok(line, ";");
             char *titulo = strtok(NULL, ";");
-            char *descricao = strtok(NULL, ";");
 
             struct Noticia *Noticia = malloc(sizeof(struct Noticia));
             Noticia->id = malloc(strlen(id) + 1);
             strcpy(Noticia->id, id);
             Noticia->titulo = malloc(strlen(titulo) + 1);
             strcpy(Noticia->titulo, titulo);
-            Noticia->descricao = malloc(strlen(descricao) + 1);
-            strcpy(Noticia->descricao, descricao);
 
             // append to the list
             append_noticia(noticia_list, Noticia);
@@ -139,7 +136,7 @@ int main(int argc, char *argv[])
         i++;
     }
     printf("List of news:\n");
-    list_noticias(noticia_list);
+    list_topics(noticia_list);
 
     // print all the users
     printf("List of users:\n");

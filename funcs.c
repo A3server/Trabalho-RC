@@ -672,12 +672,12 @@ char *list_users_str(struct UsrList *users_list)
     return result;
 }
 
-void list_noticias(struct NoticiaList *noticia_list)
+void list_topics(struct NoticiaList *noticia_list)
 {
     struct NoticiaList *aux = noticia_list->next;
     while (aux != NULL)
     {
-        printf("%s - %s\n%s\n", aux->Noticia->id, aux->Noticia->titulo, aux->Noticia->descricao);
+        printf("%s - %s\n", aux->Noticia->id, aux->Noticia->titulo);
         aux = aux->next;
     }
 }
@@ -768,7 +768,7 @@ void save_to_file(struct UsrList *users_list, struct NoticiaList *noticia_list)
     struct NoticiaList *aux2 = noticia_list->next;
     while (aux2 != NULL)
     {
-        sprintf(together, "%s;%s;%s\n", aux2->Noticia->id, aux2->Noticia->titulo, aux2->Noticia->descricao);
+        sprintf(together, "%s;%s", aux2->Noticia->id, aux2->Noticia->titulo);
         strcat(toprint, together);
         aux2 = aux2->next;
     }

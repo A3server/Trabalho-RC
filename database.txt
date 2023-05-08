@@ -1,9 +1,9 @@
-3
+5
 User1;pass1;cliente
 User2;pass2;administrador
 User3;pass3;jornalista
-1;desporto;ola isto e uma noticia muito importante de desporto, nao se esquecam
-2;tempo;noticia de tempo2131231
-2;tempo;outa noticia de tempo
-1;desporto ainda; yoyoyooyoy
-3;crypto;adoro noticias de crpyto ne
+User4;pass4;cliente
+User5;pass5;cliente
+1;desporto
+2;tempo
+3;crypto
