@@ -21,6 +21,7 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
     send(client_fd, "AUTH", 5, 0);
     // receive the answer
     char *token;
+    char *username;
 
     while (1)
     {
@@ -29,24 +30,25 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
 
         // split buffer with ;
         token = strtok(buffer, ";");
-        char *username = token;
+        username = token;
         token = strtok(NULL, ";");
         char *password = token;
 
-        char *message;
-        message = malloc(sizeof(char) * BUF_SIZE);
+        char *message = malloc(sizeof(char) * BUF_SIZE);
+
         // check if user exists
-        if (check_valid_user_cred(users_list, username, password, 0))
+        if (check_valid_user_cred(users_list, username, password, 0) == 1)
         {
             // get the user type
-            char* type = get_user_type(users_list, username);
+            char *type = get_user_type(users_list, username);
 
             // create a message with OK-{type}
             strcat(message, "OK-");
             strcat(message, type);
 
+            printf("[SERVER TCP] Client authenticated: %s\n", message);
+
             send(client_fd, message, strlen(message), 0);
-            printf("[SERVER TCP] Client authenticated.\n");
             break;
         }
         else
@@ -69,10 +71,126 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
         char *param = token;
 
         // check if command is valid
+        /**
+         * LIST_TOPICS
+         * SUBSCRIBE_TOPIC <id do tópico>
+         * CREATE_TOPIC <id do tópico> <título do tópico>
+         * SEND_NEWS <id do tópico> <noticia>
+         */
+        if (strcmp(command, "LIST_TOPICS") == 0)
+        {
+            if (strcmp(get_user_type(users_list, username), "cliente") != 0)
+            {
+                printf("[SERVER TCP] User is not jornalista\n");
+                send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
+                continue;
+            }
+
+
+            printf("[SERVER TCP] LIST_TOPICS\n");
+
+            
+            char *topics_str = list_topics_str(noticia_list);
+            send(client_fd, topics_str, strlen(topics_str), 0);
+        }
+        else if (strcmp(command, "SUBSCRIBE_TOPIC") == 0)
+        {
+            // check if user is jornalista
+            if (strcmp(get_user_type(users_list, username), "cliente") == 0)
+            {
+                printf("[SERVER TCP] User is jornalista\n");
+                send(client_fd, "[ERROR] User is jornalista!", 28, 0);
+                continue;
+            }
+
+
+            printf("[SERVER TCP] SUBSCRIBE_TOPIC\n");
+            //TODO check if topic exists and connect to the multicast server corresponding to it
+            
+        }
+        else if (strcmp(command, "CREATE_TOPIC") == 0)
+        {
+            // todo, n testei esta merda, ve se faz sentido.
+            // @miguelopesantana
+
+            // check if user is jornalista
+            if (strcmp(get_user_type(users_list, username), "jornalista") != 0)
+            {
+                printf("[SERVER TCP] User is not jornalista\n");
+                send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
+                continue;
+            }
+
+            
+            printf("[SERVER TCP] CREATE_TOPIC\n");
+            
+            // check if topic exists
+            if (get_noticia(noticia_list, atoi(param)) != NULL)
+            {
+                printf("[SERVER TCP] Topic already exists\n");
+                send(client_fd, "[ERROR] Topic already exists!", 28, 0);
+                continue;
+            }
+            // create topic
+            struct Noticia *noticia = malloc(sizeof(struct Noticia));
+            noticia->id = malloc(strlen(param) + 1);
+            strcpy(noticia->id, param);
+            noticia->titulo = malloc(strlen(param) + 1);
+            strcpy(noticia->titulo, param);
+            append_noticia(noticia_list, noticia);
+            printf("[SERVER TCP] Topic created\n");
+
+            // write to file
+            save_to_file(users_list, noticia_list);
+            send(client_fd, "OK", 3, 0);
+        } else if (strcmp(command, "SEND_NEWS") == 0)
+        {
+            // check if user is jornalista
+            if (strcmp(get_user_type(users_list, username), "jornalista") != 0)
+            {
+                printf("[SERVER TCP] User is not jornalista\n");
+                send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
+                continue;
+            }
+
+            printf("[SERVER TCP] SEND_NEWS\n");
+            
+
+
+            // check if topic exists
+            if (get_noticia(noticia_list, atoi(param)) == NULL)
+            {
+                printf("[SERVER TCP] Topic does not exist\n");
+                send(client_fd, "[ERROR] Topic does not exist!", 28, 0);
+                continue;
+            }
+            // todo send news to the multicast server
+
+
+        } else {
+            printf("[SERVER TCP] Invalid command\n");
+            send(client_fd, "[ERROR] Invalid command!", 25, 0);
+        }
 
         fflush(stdout);
     } while (nread > 0);
     close(client_fd);
+}
+
+char *list_topics_str(struct NoticiaList *noticia_list)
+{
+    char *topics_str = malloc(sizeof(char) * BUF_SIZE);
+    bzero(topics_str, BUF_SIZE);
+    struct NoticiaList *current = noticia_list->next;
+    while (current != NULL)
+    {
+        strcat(topics_str, current->Noticia->id);
+        strcat(topics_str, " - ");
+        strcat(topics_str, current->Noticia->titulo);
+        strcat(topics_str, "\n");
+        current = current->next;
+    }
+    return topics_str;
 }
 
 void tcp_server(int PORT_ADMIN, struct NoticiaList *noticia_list, struct UsrList *users_list)
@@ -443,8 +561,6 @@ void create_multicast_server(char *topicId, int PORT)
 
         // Process the received message
         // Add your custom processing logic here
-
-
     }
 
     // Cleanup and close the socket
@@ -556,9 +672,10 @@ struct NormalUser *get_user(struct UsrList *users_list, int index)
     return NULL;
 }
 
-char* get_user_type(struct UsrList *users_list, char* username)
+char *get_user_type(struct UsrList *users_list, char *username)
 {
-    struct UsrList *aux = users_list;
+    // printf("Checking if user exists: %s\n", username);
+    struct UsrList *aux = users_list->next;
     while (aux != NULL)
     {
         if (strcmp(aux->user->name, username) == 0)
@@ -569,7 +686,6 @@ char* get_user_type(struct UsrList *users_list, char* username)
     }
     return NULL;
 }
-
 
 void append_noticia(struct NoticiaList *noticia_list, struct Noticia *Noticia)
 {
@@ -677,7 +793,7 @@ void list_topics(struct NoticiaList *noticia_list)
     struct NoticiaList *aux = noticia_list->next;
     while (aux != NULL)
     {
-        printf("%s - %s\n", aux->Noticia->id, aux->Noticia->titulo);
+        printf("%s - %s", aux->Noticia->id, aux->Noticia->titulo);
         aux = aux->next;
     }
 }
@@ -702,14 +818,14 @@ int check_valid_user_cred(struct UsrList *users_list, char *username, char *pass
     while (aux != NULL)
     {
 
-        /* printf("Username: %s %s\n", aux->user->name, username);
-        printf("Password: %s %s\n", aux->user->password, password);
+        /*  printf("Username: %s %s\n", aux->user->name, username);
+         printf("Password: %s %s\n", aux->user->password, password);
 
-        printf("username: %d\n", strcmp(aux->user->name, username));
-        printf("password: %d\n", strcmp(aux->user->password, password));
+         printf("username: %d\n", strcmp(aux->user->name, username));
+         printf("password: %d\n", strcmp(aux->user->password, password));
 
-        printf("Needs to be admin: %d\n", needsToBeAdmin);
-        printf("admin: %d\n", strcmp(aux->user->type, "administrador")); */
+         printf("Needs to be admin: %d\n", needsToBeAdmin);
+         printf("admin: %d\n", strcmp(aux->user->type, "administrador")); */
 
         if (strcmp(aux->user->name, username) == 0 && strcmp(aux->user->password, password) == 0)
         {

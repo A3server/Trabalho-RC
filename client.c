@@ -99,14 +99,33 @@ int main(int argc, char *argv[])
       char *token = strtok(buffer, "-");
       char *type = strtok(NULL, "-");
 
-      if (strcmp(type, "administrador") == 0 || strcmp(type, "jornalista") == 0 || strcmp(type, "cliente") == 0)
+      if (strcmp(type, "jornalista") != 0 && strcmp(type, "cliente") != 0)
       {
-        printf("Welcome %s\n - %s", username, type);
-        break;
+        printf("Authentication failed, wrong user type.\nPlease try again:\n");
+        continue;
       }
 
-      //TODO: check if jornalista, and then write new topics with the command "CREATE_TOPIC"
+      printf("Welcome %s - %s\n", type, username);
+      if (strcmp(type, "cliente") == 0)
+      {
+        printf("Available Commands:\nLIST_TOPICS\nSUBSCRIBE_TOPIC <topic id>\n");
 
+        
+
+
+      }
+      else if (strcmp(type, "jornalista") == 0)
+      {
+
+        // TODO: check if jornalista, and then write new topics with the command "CREATE_TOPIC"
+        // TODO: n pode haver topicos repetidos boi, se houver dá erro fdp
+        // TODO: fazes merda, fodo-te
+        // TODO: se o topico ja existir, da erro
+
+        // TODO: no server ja dei uns tabs do copilot, ve se aquela merda faz sentido
+
+        // faz o comando CREATE_TOPIC agora, é só escrever e criar o multicast server, está por ai o codigo
+      }
     }
   }
 

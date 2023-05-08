@@ -135,11 +135,11 @@ int main(int argc, char *argv[])
 
         i++;
     }
-    printf("List of news:\n");
+    printf("\nList of topics:\n");
     list_topics(noticia_list);
 
     // print all the users
-    printf("List of users:\n");
+    printf("\nList of users:\n");
     list_users(users_list);
 
     // create a multicast server for each topic id, if there's already a server running for that topic id, don't create another one

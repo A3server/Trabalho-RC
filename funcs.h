@@ -54,6 +54,7 @@ void delete_user(struct UsrList *users_list, char *username);
 void list_users(struct UsrList *users_list);
 char* list_users_str(struct UsrList* users_list);
 void list_topics(struct NoticiaList *noticia_list);
+char *list_topics_str(struct NoticiaList *noticia_list);
 void refresh_time(char *segundos);
 int user_exists(char *username, struct UsrList *users_list);
 void append_user(struct UsrList *users_list, struct NormalUser *user);
