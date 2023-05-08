@@ -18,9 +18,7 @@
 #include <sys/shm.h>
 
 
-pid_t mainPID;
-pid_t tcpServerPID;
-pid_t udpServerPID;
+
 
 struct NormalUser
 {
@@ -46,7 +44,6 @@ struct NoticiaList
     struct NoticiaList *next;
 };
 
-int shmid;
 
 int check_valid_user_cred(struct UsrList *users_list, char *username, char *password, int needsToBeAdmin);
 int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users_list);

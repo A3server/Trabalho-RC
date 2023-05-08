@@ -18,6 +18,11 @@
     ▪ QUIT_SERVER
 */
 
+pid_t mainPID;
+pid_t tcpServerPID;
+pid_t udpServerPID;
+int shmid;
+
 int main(int argc, char *argv[])
 {
     if (argc != 4)

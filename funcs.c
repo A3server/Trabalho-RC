@@ -8,6 +8,10 @@
 */
 
 int REFRESH_TIME;
+extern pid_t mainPID;
+extern pid_t tcpServerPID;
+extern pid_t udpServerPID;
+extern int shmid;
 
 void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrList *users_list)
 {
