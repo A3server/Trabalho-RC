@@ -56,7 +56,6 @@ int main(int argc, char *argv[])
         erro("ERROR reading from socket");
     printf("Recieved: %s\n", buffer);
 
-
     // check if server asked for authentication
     if (strcmp(buffer, "AUTH") == 0)
     {
@@ -103,6 +102,60 @@ int main(int argc, char *argv[])
                 printf("Please try again...\n");
             }
         }
+    }
+
+    /*
+    Server recognises these commands:
+        ADD_USER {username} {password} {administrador/cliente/jornalista}
+        Eliminar um utilizador
+        ▪ DEL {username}
+        Lista utilizadores
+        ▪ LIST
+        Sair da consola
+        ▪ QUIT
+        Desligar servidor
+        ▪ QUIT_SERVER
+    */
+    while (1)
+    {
+        char command[BUFLEN];
+        printf("server@admin$ ");
+        
+        // read the command using fgets from console
+        bzero(command, BUFLEN);
+        fgets(command, BUFLEN, stdin);
+        command[strcspn(command, "\r\n")] = '\0';
+
+        // send the command to the server
+        if (sendto(fd, command, strlen(command), 0, (struct sockaddr *)&addr, sizeof(addr)) == -1)
+            erro("sendto");
+
+        // wait for server to send data
+        bzero(buffer, BUFLEN);
+        n = recvfrom(fd, buffer, BUFLEN, 0, (struct sockaddr *)&addr, &addrlen);
+        if (n < 0)
+            erro("ERROR reading from socket");
+        //printf("Recieved: %s\n", buffer);
+
+        if (strcmp(buffer, "OK") == 0)
+        {
+            printf("Command executed successfully\n");
+        }
+        else if (strcmp(buffer, "QUIT") == 0)
+        {
+            printf("Exiting...\n");
+            break;
+        }
+        else if (strcmp(buffer, "GOODBYE") == 0)
+        {
+            printf("Shutted down server...\n");
+        } else {
+            // print buffer
+            printf("User List:\n---------------\n%s\n---------------\n", buffer);
+
+        }
+
+        //todo check if server asked for authentication?
     }
 
     exit(0);

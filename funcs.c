@@ -1,6 +1,5 @@
 #include "funcs.h"
 /*
-{username administrador}/{password de administrador}
 {Número de utilizadores iniciais} # no máximo 5
 [username utilizador 1;password utilizador 1;saldo inicial]
 (..)
@@ -9,7 +8,6 @@
 */
 
 /*
-    admin/admin_password
     2
     User1;pass1;1000
     User2;pass2;1500
@@ -23,7 +21,7 @@
 
 int REFRESH_TIME;
 
-void process_client(int client_fd, struct AcaoList *acao_list, struct UsrList *users_list, struct RootUser *root)
+void process_client(int client_fd, struct AcaoList *acao_list, struct UsrList *users_list)
 {
     int nread = 0;
     char buffer[BUF_SIZE];
@@ -46,7 +44,7 @@ void process_client(int client_fd, struct AcaoList *acao_list, struct UsrList *u
         char *message;
         message = malloc(sizeof(char) * BUF_SIZE);
         // check if user exists
-        if (check_valid_admin_cred(root, username, password))
+        if (check_valid_user_cred(users_list, username, password, 0))
         {
             message = "OK";
             send(client_fd, message, strlen(message), 0);
@@ -79,7 +77,7 @@ void process_client(int client_fd, struct AcaoList *acao_list, struct UsrList *u
     close(client_fd);
 }
 
-void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *users_list, struct RootUser *root)
+void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *users_list)
 {
     int fd, client;
     struct sockaddr_in addr, client_addr;
@@ -113,7 +111,7 @@ void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *user
             if (fork() == 0)
             {
                 close(fd);
-                process_client(client, acao_list, users_list, root);
+                process_client(client, acao_list, users_list);
                 exit(0);
             }
             close(client);
@@ -121,7 +119,7 @@ void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *user
     }
 }
 
-int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list, struct RootUser *root)
+int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
 {
     // server start:
     struct sockaddr_in si_minha, si_outra;
@@ -186,7 +184,7 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list,
             buf[recv_len] = '\0';
             // split buffer with ;
             char *token;
-            printf("[SERVER UDP] Received packet from %s:%d (size: %d bytes) - %s \n", inet_ntoa(si_outra.sin_addr), ntohs(si_outra.sin_port), recv_len, buf);
+            printf("[SERVER UDP] Received AUTH packet from %s:%d (size: %d bytes) - %s \n", inet_ntoa(si_outra.sin_addr), ntohs(si_outra.sin_port), recv_len, buf);
             token = strtok(buf, ";");
             username = token;
             token = strtok(NULL, ";");
@@ -204,13 +202,14 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list,
             else
             {
                 // send FAIL
+                printf("[SERVER UDP] AUTH FAILED\n");
                 sendto(s, "FAIL", 4, 0, (struct sockaddr *)&si_outra, slen);
             }
         }
     }
     else
     {
-        printf("[SERVER UDP] AUTH FAILED\n");
+        printf("[SERVER UDP] NO AUTH TOKEN FAILED\n");
         sendto(s, "AUTH FAILED", 12, 0, (struct sockaddr *)&si_outra, slen);
         return 0;
     }
@@ -236,23 +235,25 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list,
 
         char *command = strtok(buf, " \n");
 
-        // if its AUTH restart the program
-        if (strcmp(command, "AUTH") == 0)
+        // auth in the middle of the session
+        if (strcmp(buf, "AUTH") == 0)
         {
             printf("[SERVER UDP] AUTH\n");
             // send to the client asking for auth
+
+            sendto(s, "AUTH", 6, 0, (struct sockaddr *)&si_outra, slen);
             while (1)
             {
-                sendto(s, "AUTH", 6, 0, (struct sockaddr *)&si_outra, slen);
                 // Espera recepção de mensagem (a chamada é bloqueante)
                 if ((recv_len = recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *)&si_outra, (socklen_t *)&slen)) == -1)
                 {
                     erro("[CLIENT] Erro no recvfrom");
                 }
+
                 buf[recv_len] = '\0';
                 // split buffer with ;
                 char *token;
-                printf("[SERVER UDP] Received packet from %s:%d (size: %d bytes) - %s \n", inet_ntoa(si_outra.sin_addr), ntohs(si_outra.sin_port), recv_len, buf);
+                printf("[SERVER UDP] Received AUTH packet from %s:%d (size: %d bytes) - %s \n", inet_ntoa(si_outra.sin_addr), ntohs(si_outra.sin_port), recv_len, buf);
                 token = strtok(buf, ";");
                 username = token;
                 token = strtok(NULL, ";");
@@ -263,12 +264,23 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list,
                 if (check_valid_user_cred(users_list, username, password, 1) == 1)
                 {
                     // send OK
+                    printf("[SERVER UDP] AUTH OK\n");
                     sendto(s, "OK", 3, 0, (struct sockaddr *)&si_outra, slen);
+
+                    // wait for command again
+                    if ((recv_len = recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *)&si_outra, (socklen_t *)&slen)) == -1)
+                    {
+                        erro("[CLIENT] Erro no recvfrom");
+                    }
+                    // Para ignorar o restante conteúdo (anterior do buffer)
+                    buf[recv_len] = '\0';
+                    command = strtok(buf, " \n");
                     break;
                 }
                 else
                 {
                     // send FAIL
+                    printf("[SERVER UDP] AUTH FAILED\n");
                     sendto(s, "FAIL", 4, 0, (struct sockaddr *)&si_outra, slen);
                 }
             }
@@ -289,13 +301,14 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list,
             }
             else
             {
-                // remove \n from bolsas and replace it with \0
-                type[strlen(type) - 1] = '\0';
+                type[strlen(type)] = '\0';
             }
 
             if (user_exists(username, users_list))
             {
                 printf("[CLIENT] User already exists!\n");
+                // send error
+                sendto(s, "[ERROR] User already exists!", 28, 0, (struct sockaddr *)&si_outra, slen);
                 continue;
             }
 
@@ -306,48 +319,43 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list,
             strcpy(user->name, username);
             user->password = malloc(strlen(password) + 1);
             strcpy(user->password, password);
-            /* int saldo_int = atoi(saldo);
-            if (saldo_int < 0)
-            {
-                printf("[CLIENT] The saldo is invalid!\n");
-                return -1;
-            }
-            user->saldo = saldo_int; */
 
             user->type = malloc(strlen(type) + 1);
             strcpy(user->type, type);
 
             append_user(users_list, user);
 
-            save_to_file(users_list, acao_list, root);
+            save_to_file(users_list, acao_list);
+
+            // send ok to client
+            sendto(s, "OK", 3, 0, (struct sockaddr *)&si_outra, slen);
         }
         // comand has this format DEL {username}
         else if (strcmp(command, "DEL") == 0)
         {
             username = strtok(NULL, " ");
             // find \n and replace it with \0
-            username[strlen(username) - 1] = '\0';
+            username[strlen(username)] = '\0';
 
             if (!user_exists(username, users_list))
             {
                 printf("User does not exist!\n");
+                sendto(s, "[ERROR] User does not exist!", 28, 0, (struct sockaddr *)&si_outra, slen);
                 continue;
             }
             printf("[CLIENT] Deleting User: %s\n", username);
             delete_user(users_list, username);
 
-            save_to_file(users_list, acao_list, root);
+            save_to_file(users_list, acao_list);
+
+            // send to client OK
+            sendto(s, "OK", 3, 0, (struct sockaddr *)&si_outra, slen);
         }
         // comand has this format LIST
         else if (strcmp(command, "LIST") == 0)
         {
-            list_users(users_list);
-        }
-        // comand has this format REFRESH {segundos}
-        else if (strcmp(command, "REFRESH") == 0)
-        {
-            char *segundos = strtok(NULL, " ");
-            refresh_time(segundos);
+            char *users_str = list_users_str(users_list);
+            sendto(s, users_str, strlen(users_str), 0, (struct sockaddr *)&si_outra, slen);
         }
         // comand has this format QUIT
         else if (strcmp(command, "QUIT") == 0)
@@ -359,17 +367,40 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list,
             {
                 erro("Erro no sendto");
             }
-            break;
+            continue;
         }
         else if (strcmp(command, "QUIT_SERVER") == 0)
-        { // qual é a diferença, SAIR DO SERVER
-            return 1;
+        {
+            // qual é a diferença, SAIR DO SERVER
+            printf("[SERVER] Quitting...\n");
+            killServers();
+            break;
         }
         else
         {
             printf("[CLIENT] Invalid command: %s\n", command);
+            // send error
+            sendto(s, "[ERROR] Invalid command!", 24, 0, (struct sockaddr *)&si_outra, slen);
         }
+    }   
+
+    //! warning this closes the UDP Thread but not the TCP Thread.
+    // send to CLIENT goodbye
+    if (sendto(s, "GOODBYE", strlen("GOODBYE"), 0, (struct sockaddr *)&si_outra, slen) == -1)
+    {
+        erro("Erro no sendto");
     }
+    close(s);
+    exit(0);
+    return 0;
+}
+
+void killServers() {
+    printf("Killing servers: %d %d\n", tcpServerPID, udpServerPID);
+    if (tcpServerPID > 0)
+        kill(tcpServerPID, SIGTERM);
+    if (udpServerPID > 0)
+        kill(udpServerPID, SIGTERM);
 }
 
 void erro(char *s)
@@ -490,9 +521,13 @@ void append_acao(struct AcaoList *acao_list, struct Acao *acao)
 
 int user_exists(char *username, struct UsrList *users_list)
 {
+    // printf("Checking if user exists: %s\n", username);
+
     struct UsrList *aux = users_list->next;
     while (aux != NULL)
     {
+        /* printf("name: %s\n", aux->user->name);
+        printf("Checking if user exists: %d\n", strcmp(aux->user->name, username)); */
         if (strcmp(aux->user->name, username) == 0)
         {
             return 1;
@@ -536,6 +571,34 @@ void list_users(struct UsrList *users_list)
     }
 }
 
+char *list_users_str(struct UsrList *users_list)
+{
+    struct UsrList *aux = users_list->next;
+    char *result = NULL;    // Pointer to store the result string
+    size_t result_size = 0; // Current size of the result string
+
+    while (aux != NULL)
+    {
+        // Allocate memory for the new line to be added to the result string
+        size_t line_size = strlen(aux->user->name) + strlen(aux->user->type) + 4; // 4 accounts for the additional characters: ' - ' and '\n'
+        char *line = malloc(line_size + 1);                                       // +1 for null terminator
+        snprintf(line, line_size + 1, "%s - %s\n", aux->user->name, aux->user->type);
+
+        // Resize the result string to accommodate the new line
+        result = realloc(result, result_size + line_size + 1); // +1 for null terminator
+
+        // Append the new line to the result string
+        strcat(result, line);
+        result_size += line_size;
+
+        free(line); // Free the memory allocated for the line
+
+        aux = aux->next;
+    }
+
+    return result;
+}
+
 void list_stocks(struct AcaoList *acao_list)
 {
     struct AcaoList *aux = acao_list->next;
@@ -558,34 +621,22 @@ int get_users_lenght(struct UsrList *users_list)
     return i;
 }
 
-int check_valid_admin_cred(struct RootUser *root_user, char *username, char *password)
-{
-    /* printf("Checking admin credentials...\n");
-    printf("Username: ,%s,%s,\n", username,root_user->name);
-    printf("Pass: %s,%s,\n", password,root_user->password); */
-
-    if (strcmp(root_user->name, username) == 0 && strcmp(root_user->password, password) == 0)
-    {
-        return 1;
-    }
-    return 0;
-}
-
 int check_valid_user_cred(struct UsrList *users_list, char *username, char *password, int needsToBeAdmin)
 {
+    // list_users(users_list);
+
     struct UsrList *aux = users_list->next;
     while (aux != NULL)
     {
-        /*
-        printf("Username: %s %s\n", aux->user->name, username);
+
+        /* printf("Username: %s %s\n", aux->user->name, username);
         printf("Password: %s %s\n", aux->user->password, password);
 
         printf("username: %d\n", strcmp(aux->user->name, username));
         printf("password: %d\n", strcmp(aux->user->password, password));
 
         printf("Needs to be admin: %d\n", needsToBeAdmin);
-        printf("admin: %d\n", strcmp(aux->user->type, "administrador"));
-        */
+        printf("admin: %d\n", strcmp(aux->user->type, "administrador")); */
 
         if (strcmp(aux->user->name, username) == 0 && strcmp(aux->user->password, password) == 0)
         {
@@ -606,7 +657,7 @@ int check_valid_user_cred(struct UsrList *users_list, char *username, char *pass
     return 0;
 }
 
-void save_to_file(struct UsrList *users_list, struct AcaoList *acao_list, struct RootUser *root_user)
+void save_to_file(struct UsrList *users_list, struct AcaoList *acao_list)
 {
     // check if database has something inside, if it does delete it
 
@@ -616,12 +667,6 @@ void save_to_file(struct UsrList *users_list, struct AcaoList *acao_list, struct
 
     char *toprint = malloc(sizeof(char) * 3000);
     memset(toprint, 0, 3000); //! important
-
-    // write root user:
-    sprintf(together, "%s/%s", root_user->name, root_user->password);
-
-    strcat(toprint, together);
-
     // write users:
     // get users lenght
     int users_lenght = get_users_lenght(users_list);

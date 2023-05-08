@@ -1,7 +1,7 @@
-admin/pass
-2
+3
 User1;pass1;cliente
 User2;pass2;administrador
+User3;pass3;jornalista
 bvl;stock_bvl_2;10.000000
 bvl;stock_bvl_3;10.000000
 nyse;stock_nyse_1;10.000000
