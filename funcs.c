@@ -3,25 +3,13 @@
 {Número de utilizadores iniciais} # no máximo 5
 [username utilizador 1;password utilizador 1;saldo inicial]
 (..)
-{mercado};{ação};{preço inicial} # 2 mercados, cada um com 3 ações
+{id_topic};{titulo noticia};{descrição}
 (..)
-*/
-
-/*
-    2
-    User1;pass1;1000
-    User2;pass2;1500
-    bvl;stock_bvl_1;10
-    bvl;stock_bvl_2;10
-    bvl;stock_bvl_3;10
-    nyse;stock_nyse_1;10
-    nyse;stock_nyse_2;10
-    nyse;stock_nyse_3;10
 */
 
 int REFRESH_TIME;
 
-void process_client(int client_fd, struct AcaoList *acao_list, struct UsrList *users_list)
+void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrList *users_list)
 {
     int nread = 0;
     char buffer[BUF_SIZE];
@@ -46,14 +34,20 @@ void process_client(int client_fd, struct AcaoList *acao_list, struct UsrList *u
         // check if user exists
         if (check_valid_user_cred(users_list, username, password, 0))
         {
-            message = "OK";
+            // get the user type
+            char* type = get_user_type(users_list, username);
+
+            // create a message with OK-{type}
+            strcat(message, "OK-");
+            strcat(message, type);
+
             send(client_fd, message, strlen(message), 0);
             printf("[SERVER TCP] Client authenticated.\n");
             break;
         }
         else
         {
-            message = "Authentication Failed";
+            message = "NOK";
         }
         send(client_fd, message, strlen(message), 0);
     }
@@ -77,7 +71,7 @@ void process_client(int client_fd, struct AcaoList *acao_list, struct UsrList *u
     close(client_fd);
 }
 
-void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *users_list)
+void tcp_server(int PORT_ADMIN, struct NoticiaList *noticia_list, struct UsrList *users_list)
 {
     int fd, client;
     struct sockaddr_in addr, client_addr;
@@ -85,8 +79,9 @@ void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *user
 
     bzero((void *)&addr, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY); // localhost
     addr.sin_port = htons(PORT_ADMIN);
+
     fd = socket(AF_INET, SOCK_STREAM, 0);
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
     if (fd < 0)
@@ -111,7 +106,7 @@ void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *user
             if (fork() == 0)
             {
                 close(fd);
-                process_client(client, acao_list, users_list);
+                process_client(client, noticia_list, users_list);
                 exit(0);
             }
             close(client);
@@ -119,7 +114,7 @@ void tcp_server(int PORT_ADMIN, struct AcaoList *acao_list, struct UsrList *user
     }
 }
 
-int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
+int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users_list)
 {
     // server start:
     struct sockaddr_in si_minha, si_outra;
@@ -137,7 +132,7 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
     // Preenchimento da socket address structure
     si_minha.sin_family = PF_INET;
     si_minha.sin_port = htons(PORT);
-    si_minha.sin_addr.s_addr = htonl(INADDR_ANY);
+    si_minha.sin_addr.s_addr = htonl(INADDR_ANY); // localhost
 
     // Associa o socket à informação de endereço
     if (bind(s, (struct sockaddr *)&si_minha, sizeof(si_minha)) == -1)
@@ -325,7 +320,7 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
 
             append_user(users_list, user);
 
-            save_to_file(users_list, acao_list);
+            save_to_file(users_list, noticia_list);
 
             // send ok to client
             sendto(s, "OK", 3, 0, (struct sockaddr *)&si_outra, slen);
@@ -346,7 +341,7 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
             printf("[CLIENT] Deleting User: %s\n", username);
             delete_user(users_list, username);
 
-            save_to_file(users_list, acao_list);
+            save_to_file(users_list, noticia_list);
 
             // send to client OK
             sendto(s, "OK", 3, 0, (struct sockaddr *)&si_outra, slen);
@@ -381,7 +376,7 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
             // send error
             sendto(s, "[ERROR] Invalid command!", 24, 0, (struct sockaddr *)&si_outra, slen);
         }
-    }   
+    }
 
     //! warning this closes the UDP Thread but not the TCP Thread.
     // send to CLIENT goodbye
@@ -395,8 +390,66 @@ int udp_server(int PORT, struct AcaoList *acao_list, struct UsrList *users_list)
     return 0;
 }
 
+void create_multicast_server(char *topicId, int PORT)
+{
+    int fd;
+    struct sockaddr_in addr;
+    struct ip_mreq mreq;
+    char buffer[BUFLEN];
+
+    // Create a UDP socket
+    if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+    {
+        perror("socket");
+        exit(1);
+    }
+
+    // Set socket options to allow multicast
+    int enable = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0)
+    {
+        perror("setsockopt");
+        exit(1);
+    }
+
+    // Bind the socket to the multicast address and port
+    memset((char *)&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY); // localhost
+    addr.sin_port = htons(PORT);
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        perror("bind");
+        exit(1);
+    }
+
+    printf("[MULTICAST SERVER@%s] Started.\n", topicId);
+
+    // Receive and process incoming multicast messages
+    while (1)
+    {
+        bzero(buffer, BUFLEN);
+        if (recvfrom(fd, buffer, BUFLEN, 0, NULL, 0) < 0)
+        {
+            perror("recvfrom");
+            exit(1);
+        }
+        printf("[MULTICAST@topic:%s] Received message: %s\n", topicId, buffer);
+
+        // Process the received message
+        // Add your custom processing logic here
+
+
+    }
+
+    // Cleanup and close the socket
+    close(fd);
+}
+
 // TODO: DOESNT WORK
-void killServers() {
+void killServers()
+{
     printf("Killing servers: %d %d\n", tcpServerPID, udpServerPID);
     if (tcpServerPID > 0)
         kill(tcpServerPID, SIGKILL);
@@ -441,10 +494,10 @@ int get_users_size(struct UsrList *users_list)
     return i;
 }
 
-int get_acao_size(struct AcaoList *acao_list)
+int get_noticia_size(struct NoticiaList *noticia_list)
 {
     int i = 0;
-    struct AcaoList *aux = acao_list;
+    struct NoticiaList *aux = noticia_list;
     while (aux != NULL)
     {
         i++;
@@ -467,15 +520,15 @@ void append_user(struct UsrList *users_list, struct NormalUser *user)
     aux->next->next = NULL;
 }
 
-struct Acao *get_acao(struct AcaoList *acao_list, int index)
+struct Noticia *get_noticia(struct NoticiaList *noticia_list, int index)
 {
     int i = 0;
-    struct AcaoList *aux = acao_list;
+    struct NoticiaList *aux = noticia_list;
     while (aux != NULL)
     {
         if (i == index)
         {
-            return aux->acao;
+            return aux->Noticia;
         }
         i++;
         aux = aux->next;
@@ -499,19 +552,34 @@ struct NormalUser *get_user(struct UsrList *users_list, int index)
     return NULL;
 }
 
-void append_acao(struct AcaoList *acao_list, struct Acao *acao)
+char* get_user_type(struct UsrList *users_list, char* username)
 {
-    struct AcaoList *new_acao = malloc(sizeof(struct AcaoList));
-    new_acao->acao = acao;
+    struct UsrList *aux = users_list;
+    while (aux != NULL)
+    {
+        if (strcmp(aux->user->name, username) == 0)
+        {
+            return aux->user->type;
+        }
+        aux = aux->next;
+    }
+    return NULL;
+}
+
+
+void append_noticia(struct NoticiaList *noticia_list, struct Noticia *Noticia)
+{
+    struct NoticiaList *new_acao = malloc(sizeof(struct NoticiaList));
+    new_acao->Noticia = Noticia;
     new_acao->next = NULL;
 
-    if (acao_list->next == NULL)
+    if (noticia_list->next == NULL)
     {
-        acao_list->next = new_acao;
+        noticia_list->next = new_acao;
     }
     else
     {
-        struct AcaoList *aux = acao_list->next;
+        struct NoticiaList *aux = noticia_list->next;
         while (aux->next != NULL)
         {
             aux = aux->next;
@@ -600,12 +668,12 @@ char *list_users_str(struct UsrList *users_list)
     return result;
 }
 
-void list_stocks(struct AcaoList *acao_list)
+void list_noticias(struct NoticiaList *noticia_list)
 {
-    struct AcaoList *aux = acao_list->next;
+    struct NoticiaList *aux = noticia_list->next;
     while (aux != NULL)
     {
-        printf("%s - %s @ %f\n", aux->acao->mercado, aux->acao->nomestock, aux->acao->currentprice);
+        printf("%s - %s\n%s\n", aux->Noticia->id, aux->Noticia->titulo, aux->Noticia->descricao);
         aux = aux->next;
     }
 }
@@ -658,7 +726,7 @@ int check_valid_user_cred(struct UsrList *users_list, char *username, char *pass
     return 0;
 }
 
-void save_to_file(struct UsrList *users_list, struct AcaoList *acao_list)
+void save_to_file(struct UsrList *users_list, struct NoticiaList *noticia_list)
 {
     // check if database has something inside, if it does delete it
 
@@ -692,11 +760,11 @@ void save_to_file(struct UsrList *users_list, struct AcaoList *acao_list)
     }
     // printf("%s\n", toprint);
 
-    // write acao_list:
-    struct AcaoList *aux2 = acao_list->next;
+    // write noticia_list:
+    struct NoticiaList *aux2 = noticia_list->next;
     while (aux2 != NULL)
     {
-        sprintf(together, "%s;%s;%f\n", aux2->acao->mercado, aux2->acao->nomestock, aux2->acao->currentprice);
+        sprintf(together, "%s;%s;%s\n", aux2->Noticia->id, aux2->Noticia->titulo, aux2->Noticia->descricao);
         strcat(toprint, together);
         aux2 = aux2->next;
     }

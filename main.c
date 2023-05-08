@@ -46,10 +46,10 @@ int main(int argc, char *argv[])
     users_list->next = NULL;
     users_list->user = NULL;
 
-    struct AcaoList *acao_list;
-    acao_list = malloc(sizeof(struct AcaoList));
-    acao_list->next = NULL;
-    acao_list->acao = NULL;
+    struct NoticiaList *noticia_list;
+    noticia_list = malloc(sizeof(struct NoticiaList));
+    noticia_list->next = NULL;
+    noticia_list->Noticia = NULL;
 
     char line[256];
     int i = 0;
@@ -114,43 +114,87 @@ int main(int argc, char *argv[])
         else
         {
             // read line
-            char *market = strtok(line, ";");
-            char *nomeacao = strtok(NULL, ";");
-            char *preco = strtok(NULL, ";");
+            char *id = strtok(line, ";");
+            char *titulo = strtok(NULL, ";");
+            char *descricao = strtok(NULL, ";");
 
-            struct Acao *acao = malloc(sizeof(struct Acao));
-            acao->mercado = malloc(strlen(market) + 1);
-            strcpy(acao->mercado, market);
-            acao->nomestock = malloc(strlen(nomeacao) + 1);
-            strcpy(acao->nomestock, nomeacao);
+            struct Noticia *Noticia = malloc(sizeof(struct Noticia));
+            Noticia->id = malloc(strlen(id) + 1);
+            strcpy(Noticia->id, id);
+            Noticia->titulo = malloc(strlen(titulo) + 1);
+            strcpy(Noticia->titulo, titulo);
+            Noticia->descricao = malloc(strlen(descricao) + 1);
+            strcpy(Noticia->descricao, descricao);
 
-            acao->currentprice = atof(preco);
             // append to the list
-
-            append_acao(acao_list, acao);
+            append_noticia(noticia_list, Noticia);
             i++;
         }
 
         i++;
     }
     printf("List of news:\n");
-    list_stocks(acao_list);
+    list_noticias(noticia_list);
 
     // print all the users
     printf("List of users:\n");
     list_users(users_list);
 
+    // create a multicast server for each topic id, if there's already a server running for that topic id, don't create another one
+    // loop through the list and keep track of unique topic ids
+    // get noticias size
+    int noticias_size = get_noticia_size(noticia_list);
+    char *topic_ids[noticias_size];
+    int topic_ids_size = 0;
+    struct NoticiaList *current = noticia_list->next;
+    while (current != NULL)
+    {
+        // check if the topic id is already in the array
+        int found = 0;
+        for (int i = 0; i < topic_ids_size; i++)
+        {
+            if (strcmp(topic_ids[i], current->Noticia->id) == 0)
+            {
+                found = 1;
+                break;
+            }
+        }
+
+        // if not found, add it to the array
+        if (found == 0)
+        {
+            topic_ids[topic_ids_size] = malloc(strlen(current->Noticia->id) + 1);
+            strcpy(topic_ids[topic_ids_size], current->Noticia->id);
+            topic_ids_size++;
+        }
+
+        current = current->next;
+    }
+
+    // create a multicast server for each topic id
+    for (int i = 0; i < topic_ids_size; i++)
+    {
+        if (fork() == 0)
+        {
+            // create a multicast server for this topic id
+            create_multicast_server(topic_ids[i], PORT);
+            exit(0);
+        }
+    }
+
+
+
     // create two processes, 1 for tcp and one for udp
     if ((tcpServerPID = fork()) == 0)
     {
         // TCP server code
-        tcp_server(PORT, acao_list, users_list);
+        tcp_server(PORT, noticia_list, users_list);
         exit(0);
     }
     else if ((udpServerPID = fork()) == 0)
     {
         // UDP server code
-        udp_server(PORT_ADMIN, acao_list, users_list);
+        udp_server(PORT_ADMIN, noticia_list, users_list);
         exit(0);
     }
 

@@ -6,6 +6,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <arpa/inet.h>
+
 #define BUFLEN 512 // Tamanho do buffer
 
 void erro(char *msg);
@@ -87,21 +89,42 @@ int main(int argc, char *argv[])
         erro("ERROR reading from socket");
       printf("Recieved: %s\n", buffer);
 
-      // check if authentication was successful
-      if (strcmp(buffer, "OK") == 0)
+      // check if authentication was successful if recieved NOK or its not type of OK-{type}
+      if (strcmp(buffer, "NOK") == 0 || strncmp(buffer, "OK", 2) != 0)
       {
-        printf("Authentication successful\n");
-        break;
+        printf("Authentication failed, Please try again:\n");
+        continue;
       }
-      else
+
+      char *token = strtok(buffer, "-");
+      char *type = strtok(NULL, "-");
+
+      if (strcmp(type, "administrador") == 0 || strcmp(type, "jornalista") == 0 || strcmp(type, "cliente") == 0)
       {
-        printf("Please try again:\n");
+        printf("Welcome %s\n - %s", username, type);
+        break;
       }
     }
   }
 
   close(fd);
   exit(0);
+}
+
+void join_multicast_sv(char *multicastAddr)
+{
+
+  int fd;
+  struct ip_mreq mreq;
+
+  // Join the multicast group
+  mreq.imr_multiaddr.s_addr = inet_addr(multicastAddr);
+  mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+  if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0)
+  {
+    perror("setsockopt");
+    exit(1);
+  }
 }
 
 void erro(char *msg)
