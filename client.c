@@ -56,11 +56,12 @@ int main(int argc, char *argv[])
   // check if server asked for authentication
   if (strcmp(buffer, "AUTH") == 0)
   {
-
+    char username[BUFLEN];
+    char password[BUFLEN];
+    char *type;
     while (1)
     {
-      char username[BUFLEN];
-      char password[BUFLEN];
+
       // printf("Authentication required\n");
       printf("Username: ");
       bzero(username, BUFLEN);
@@ -97,35 +98,79 @@ int main(int argc, char *argv[])
       }
 
       char *token = strtok(buffer, "-");
-      char *type = strtok(NULL, "-");
+      char *aux_type = strtok(NULL, "-");
+      // copy the type of user
+      type = malloc(strlen(aux_type) + 1);
+      strcpy(type, aux_type);
 
-      if (strcmp(type, "jornalista") != 0 && strcmp(type, "cliente") != 0)
+      if (strcmp(type, "jornalista") == 0 || strcmp(type, "cliente") == 0)
       {
-        printf("Authentication failed, wrong user type.\nPlease try again:\n");
-        continue;
+        break;
       }
+      printf("Authentication failed, wrong user type, got: %s\nPlease try again:\n", type);
+    }
 
-      printf("Welcome %s - %s\n", type, username);
-      if (strcmp(type, "cliente") == 0)
+    printf("Welcome %s - %s\n", type, username);
+    if (strcmp(type, "cliente") == 0)
+    {
+      printf("Available Commands:\n  - LIST_TOPICS\n  - SUBSCRIBE_TOPIC <topic id>\nserver@%s$ ", type);
+
+      while (1)
       {
-        printf("Available Commands:\nLIST_TOPICS\nSUBSCRIBE_TOPIC <topic id>\n");
+        // read from input and check if we wrote any commands above
+        bzero(buffer, BUFLEN);
+        fgets(buffer, BUFLEN, stdin);
+        buffer[strcspn(buffer, "\r\n")] = '\0';
 
-        
+        printf("SUBSCRIBE_TOPIC: %d\n", strncmp(buffer, "SUBSCRIBE_TOPIC", 15));
+
+        // check if we wrote any commands above
+        if (strcmp(buffer, "LIST_TOPICS") == 0)
+        {
+          // send to the server the command "LIST_TOPICS"
+          n = write(fd, buffer, strlen(buffer));
+          if (n < 0)
+            erro("ERROR writing to socket");
+
+          // wait for server to send data
+          bzero(buffer, BUFLEN);
+          n = read(fd, buffer, BUFLEN);
+          if (n < 0)
+            erro("ERROR reading from socket");
+          printf("%s\n", buffer);
+        }
+        else if (strncmp(buffer, "SUBSCRIBE_TOPIC", 15) == 0)
+        {
+          // check if we wrote SUBSCRIBE_TOPIC with a topic id
+          char *token = strtok(buffer, " ");
+          token = strtok(NULL, " ");
+          if (token == NULL)
+          {
+            printf("Error: Invalid command\nserver@%s$ ", type);
+            continue;
+          }
+          // connect to the multicast server HERE
 
 
+        }
+        else
+        {
+          printf("Error: Invalid command\n");
+        }
+        printf("server@%s$ ", type);
       }
-      else if (strcmp(type, "jornalista") == 0)
-      {
+    }
+    else if (strcmp(type, "jornalista") == 0)
+    {
 
-        // TODO: check if jornalista, and then write new topics with the command "CREATE_TOPIC"
-        // TODO: n pode haver topicos repetidos boi, se houver dá erro fdp
-        // TODO: fazes merda, fodo-te
-        // TODO: se o topico ja existir, da erro
+      // TODO: check if jornalista, and then write new topics with the command "CREATE_TOPIC"
+      // TODO: n pode haver topicos repetidos boi, se houver dá erro fdp
+      // TODO: fazes merda, fodo-te
+      // TODO: se o topico ja existir, da erro
 
-        // TODO: no server ja dei uns tabs do copilot, ve se aquela merda faz sentido
+      // TODO: no server ja dei uns tabs do copilot, ve se aquela merda faz sentido
 
-        // faz o comando CREATE_TOPIC agora, é só escrever e criar o multicast server, está por ai o codigo
-      }
+      // faz o comando CREATE_TOPIC agora, é só escrever e criar o multicast server, está por ai o codigo
     }
   }
 

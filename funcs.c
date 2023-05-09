@@ -22,6 +22,7 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
     // receive the answer
     char *token;
     char *username;
+    char *type;
 
     while (1)
     {
@@ -30,7 +31,9 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
 
         // split buffer with ;
         token = strtok(buffer, ";");
-        username = token;
+        // copy the memory to username
+        username = malloc(strlen(token) + 1);
+        strcpy(username, token);
         token = strtok(NULL, ";");
         char *password = token;
 
@@ -40,7 +43,10 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
         if (check_valid_user_cred(users_list, username, password, 0) == 1)
         {
             // get the user type
-            char *type = get_user_type(users_list, username);
+            char *aux_type = get_user_type(users_list, username);
+            // copy the memory to type
+            type = malloc(strlen(aux_type) + 1);
+            strcpy(type, aux_type);
 
             // create a message with OK-{type}
             strcat(message, "OK-");
@@ -64,11 +70,15 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
         // receive command
         nread = read(client_fd, buffer, BUF_SIZE - 1);
         buffer[nread] = '\0';
+
+        printf("[SERVER TCP] Received command: %s\n", buffer);
         // split buffer with ;
-        token = strtok(buffer, ";");
+        token = strtok(buffer, " ");
         char *command = token;
-        token = strtok(NULL, ";");
+        token = strtok(NULL, " ");
         char *param = token;
+
+        // printf("[SERVER TCP] Command: %d\n", strcmp(command, "LIST_TOPICS"));
 
         // check if command is valid
         /**
@@ -86,10 +96,6 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
                 continue;
             }
 
-
-            printf("[SERVER TCP] LIST_TOPICS\n");
-
-            
             char *topics_str = list_topics_str(noticia_list);
             send(client_fd, topics_str, strlen(topics_str), 0);
         }
@@ -103,10 +109,8 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
                 continue;
             }
 
-
             printf("[SERVER TCP] SUBSCRIBE_TOPIC\n");
-            //TODO check if topic exists and connect to the multicast server corresponding to it
-            
+            // TODO check if topic exists and connect to the multicast server corresponding to it
         }
         else if (strcmp(command, "CREATE_TOPIC") == 0)
         {
@@ -121,9 +125,8 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
                 continue;
             }
 
-            
             printf("[SERVER TCP] CREATE_TOPIC\n");
-            
+
             // check if topic exists
             if (get_noticia(noticia_list, atoi(param)) != NULL)
             {
@@ -143,7 +146,8 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
             // write to file
             save_to_file(users_list, noticia_list);
             send(client_fd, "OK", 3, 0);
-        } else if (strcmp(command, "SEND_NEWS") == 0)
+        }
+        else if (strcmp(command, "SEND_NEWS") == 0)
         {
             // check if user is jornalista
             if (strcmp(get_user_type(users_list, username), "jornalista") != 0)
@@ -154,8 +158,6 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
             }
 
             printf("[SERVER TCP] SEND_NEWS\n");
-            
-
 
             // check if topic exists
             if (get_noticia(noticia_list, atoi(param)) == NULL)
@@ -165,9 +167,9 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
                 continue;
             }
             // todo send news to the multicast server
-
-
-        } else {
+        }
+        else
+        {
             printf("[SERVER TCP] Invalid command\n");
             send(client_fd, "[ERROR] Invalid command!", 25, 0);
         }
@@ -187,7 +189,6 @@ char *list_topics_str(struct NoticiaList *noticia_list)
         strcat(topics_str, current->Noticia->id);
         strcat(topics_str, " - ");
         strcat(topics_str, current->Noticia->titulo);
-        strcat(topics_str, "\n");
         current = current->next;
     }
     return topics_str;
@@ -546,7 +547,7 @@ void create_multicast_server(char *topicId, int PORT)
         exit(1);
     }
 
-    printf("[MULTICAST SERVER@%s] Started.\n", topicId);
+    printf("[MULTICAST SERVER@%s] Server started with info: %s:%d - %d\n", topicId, inet_ntoa(addr.sin_addr), PORT, fd);
 
     // Receive and process incoming multicast messages
     while (1)
@@ -680,6 +681,7 @@ char *get_user_type(struct UsrList *users_list, char *username)
     {
         if (strcmp(aux->user->name, username) == 0)
         {
+            // printf("[SERVER UDP] User type: %s\n", aux->user->type);
             return aux->user->type;
         }
         aux = aux->next;
@@ -689,13 +691,13 @@ char *get_user_type(struct UsrList *users_list, char *username)
 
 void append_noticia(struct NoticiaList *noticia_list, struct Noticia *Noticia)
 {
-    struct NoticiaList *new_acao = malloc(sizeof(struct NoticiaList));
-    new_acao->Noticia = Noticia;
-    new_acao->next = NULL;
+    struct NoticiaList *new_noticia = malloc(sizeof(struct NoticiaList));
+    new_noticia->Noticia = Noticia;
+    new_noticia->next = NULL;
 
     if (noticia_list->next == NULL)
     {
-        noticia_list->next = new_acao;
+        noticia_list->next = new_noticia;
     }
     else
     {
@@ -704,7 +706,7 @@ void append_noticia(struct NoticiaList *noticia_list, struct Noticia *Noticia)
         {
             aux = aux->next;
         }
-        aux->next = new_acao;
+        aux->next = new_noticia;
     }
 }
 
@@ -903,4 +905,28 @@ void save_to_file(struct UsrList *users_list, struct NoticiaList *noticia_list)
     // close file
     fflush(fp);
     fclose(fp);
+}
+
+void append_multicast_server(struct MulticastServerList *multi_server_list, struct MCserver *multi_server)
+{
+    struct MulticastServerList *new_multi_server = malloc(sizeof(struct MulticastServerList));
+    new_multi_server->server = multi_server;
+    new_multi_server->next = NULL;
+    
+    if (multi_server_list->next == NULL)
+    {
+        multi_server_list->next = new_multi_server;
+    }
+    else
+    {
+        struct MulticastServerList *aux = multi_server_list->next;
+        while (aux->next != NULL)
+        {
+            aux = aux->next;
+        }
+        aux->next = new_multi_server;
+    }
+
+    printf("[SERVER UDP] Multicast server added: %d:%s\n", multi_server->pid, multi_server->topicId);
+
 }

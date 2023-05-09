@@ -56,6 +56,13 @@ int main(int argc, char *argv[])
     noticia_list->next = NULL;
     noticia_list->Noticia = NULL;
 
+    struct MulticastServerList *multi_server_list;
+    multi_server_list = malloc(sizeof(struct MulticastServerList));
+    multi_server_list->next = NULL;
+    multi_server_list->server = NULL;
+    
+
+
     char line[256];
     int i = 0;
     while (fgets(line, sizeof(line), fp))
@@ -143,47 +150,30 @@ int main(int argc, char *argv[])
     list_users(users_list);
 
     // create a multicast server for each topic id, if there's already a server running for that topic id, don't create another one
-    // loop through the list and keep track of unique topic ids
-    // get noticias size
-    int noticias_size = get_noticia_size(noticia_list);
-    char *topic_ids[noticias_size];
-    int topic_ids_size = 0;
+    // create a list to save the pids of the multicast servers
     struct NoticiaList *current = noticia_list->next;
+    i = 0;
     while (current != NULL)
     {
-        // check if the topic id is already in the array
-        int found = 0;
-        for (int i = 0; i < topic_ids_size; i++)
-        {
-            if (strcmp(topic_ids[i], current->Noticia->id) == 0)
-            {
-                found = 1;
-                break;
-            }
-        }
-
-        // if not found, add it to the array
-        if (found == 0)
-        {
-            topic_ids[topic_ids_size] = malloc(strlen(current->Noticia->id) + 1);
-            strcpy(topic_ids[topic_ids_size], current->Noticia->id);
-            topic_ids_size++;
-        }
-
-        current = current->next;
-    }
-
-    // create a multicast server for each topic id
-    for (int i = 0; i < topic_ids_size; i++)
-    {
+        // create a multicast server for each topic id in a new process
         if (fork() == 0)
         {
-            // create a multicast server for this topic id
-            create_multicast_server(topic_ids[i], PORT);
+            // add to the multicast server list
+            struct MCserver *multi_server = malloc(sizeof(struct MCserver));
+            multi_server->pid = get_pid();
+            multi_server->topicId = malloc(strlen(current->Noticia->id) + 1);
+            strcpy(multi_server->topicId, current->Noticia->id);
+
+            // add to the list
+            append_multicast_server(multi_server_list, multi_server);
+
+            // multicast server code
+            create_multicast_server(current->Noticia->id, PORT);
             exit(0);
         }
+        current = current->next;
+        i++;
     }
-
 
 
     // create two processes, 1 for tcp and one for udp
