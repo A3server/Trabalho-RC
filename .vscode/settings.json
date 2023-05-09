@@ -2,6 +2,7 @@
     "files.associations": {
         "funcs.h": "c",
         "unistd.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "_locale.h": "c"
     }
 }

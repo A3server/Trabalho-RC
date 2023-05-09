@@ -15,7 +15,7 @@ all:	${PROG} ${PROGC} ${PROGCAD}
 
 
 ${PROG}:	${OBJS}
-			${GCC} -o ${PROG} ${OBJS}
+			${GCC} -pthread -o ${PROG} ${OBJS}
 
 ${PROGC}:	${OBJSclient}
 			${GCC} -o ${PROGC} ${OBJSclient}

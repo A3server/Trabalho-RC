@@ -12,8 +12,11 @@ extern pid_t mainPID;
 extern pid_t tcpServerPID;
 extern pid_t udpServerPID;
 extern int shmid;
+extern struct UsrList *users_list;
+extern struct MulticastServerList *multi_server_list;
+extern struct NoticiaList *noticia_list;
 
-void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrList *users_list)
+void process_client(int client_fd)
 {
     int nread = 0;
     char buffer[BUF_SIZE];
@@ -40,10 +43,10 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
         char *message = malloc(sizeof(char) * BUF_SIZE);
 
         // check if user exists
-        if (check_valid_user_cred(users_list, username, password, 0) == 1)
+        if (check_valid_user_cred(username, password, 0) == 1)
         {
             // get the user type
-            char *aux_type = get_user_type(users_list, username);
+            char *aux_type = get_user_type(username);
             // copy the memory to type
             type = malloc(strlen(aux_type) + 1);
             strcpy(type, aux_type);
@@ -68,7 +71,7 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
     do
     {
         // receive command
-        nread = read(client_fd, buffer, BUF_SIZE - 1);
+        nread = read(client_fd, buffer, BUF_SIZE);
         buffer[nread] = '\0';
 
         printf("[SERVER TCP] Received command: %s\n", buffer);
@@ -89,28 +92,57 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
          */
         if (strcmp(command, "LIST_TOPICS") == 0)
         {
-            if (strcmp(get_user_type(users_list, username), "cliente") != 0)
+            /* if (strcmp(get_user_type(username), "cliente") != 0)
             {
                 printf("[SERVER TCP] User is not jornalista\n");
                 send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
                 continue;
-            }
+            } */
 
-            char *topics_str = list_topics_str(noticia_list);
+            char *topics_str = list_topics_str();
             send(client_fd, topics_str, strlen(topics_str), 0);
         }
         else if (strcmp(command, "SUBSCRIBE_TOPIC") == 0)
         {
             // check if user is jornalista
-            if (strcmp(get_user_type(users_list, username), "cliente") == 0)
+            /* if (strcmp(get_user_type(username), "cliente") != 0)
             {
-                printf("[SERVER TCP] User is jornalista\n");
-                send(client_fd, "[ERROR] User is jornalista!", 28, 0);
+                printf("[SERVER TCP] User is not cliente\n");
+                send(client_fd, "[ERROR] User is not cliente!", 28, 0);
+                continue;
+            } */
+
+            printf("[SERVER TCP] SUBSCRIBE_TOPIC:%s\n", param);
+            // TODO check if topic exists and connect to the multicast server corresponding to it
+
+            // recieved SUBSCRIBE_TOPIC <topic id>
+
+            // GET THE TOPIC ID
+            char *topicId = param;
+
+            // check if topic exists
+            if (get_noticia(atoi(topicId)) == NULL)
+            {
+                printf("[SERVER TCP] Topic does not exist\n");
+                send(client_fd, "[ERROR] Topic does not exist!", 28, 0);
                 continue;
             }
 
-            printf("[SERVER TCP] SUBSCRIBE_TOPIC\n");
-            // TODO check if topic exists and connect to the multicast server corresponding to it
+            // send multicast server info
+            struct MulticastServerList *current = multi_server_list->next;
+            while (current != NULL)
+            {
+                printf("[SERVER TCP] Current topic: %s\n", current->server->topicId);
+                printf("[SERVER TCP] Topic id: %s\n", topicId);
+                if (strcmp(current->server->topicId, topicId) == 0)
+                {
+                    char *message = malloc(sizeof(char) * BUF_SIZE);
+                    sprintf(message, "%s;%d", current->server->address, current->server->PORT);
+                    send(client_fd, message, strlen(message), 0);
+                    break;
+                }
+                current = current->next;
+            }
         }
         else if (strcmp(command, "CREATE_TOPIC") == 0)
         {
@@ -118,17 +150,17 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
             // @miguelopesantana
 
             // check if user is jornalista
-            if (strcmp(get_user_type(users_list, username), "jornalista") != 0)
+            /* if (strcmp(get_user_type(username), "jornalista") != 0)
             {
                 printf("[SERVER TCP] User is not jornalista\n");
                 send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
                 continue;
-            }
+            } */
 
             printf("[SERVER TCP] CREATE_TOPIC\n");
 
             // check if topic exists
-            if (get_noticia(noticia_list, atoi(param)) != NULL)
+            if (get_noticia(atoi(param)) != NULL)
             {
                 printf("[SERVER TCP] Topic already exists\n");
                 send(client_fd, "[ERROR] Topic already exists!", 28, 0);
@@ -140,17 +172,17 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
             strcpy(noticia->id, param);
             noticia->titulo = malloc(strlen(param) + 1);
             strcpy(noticia->titulo, param);
-            append_noticia(noticia_list, noticia);
+            append_noticia(noticia);
             printf("[SERVER TCP] Topic created\n");
 
             // write to file
-            save_to_file(users_list, noticia_list);
+            save_to_file();
             send(client_fd, "OK", 3, 0);
         }
         else if (strcmp(command, "SEND_NEWS") == 0)
         {
             // check if user is jornalista
-            if (strcmp(get_user_type(users_list, username), "jornalista") != 0)
+            if (strcmp(get_user_type(username), "jornalista") != 0)
             {
                 printf("[SERVER TCP] User is not jornalista\n");
                 send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
@@ -160,7 +192,7 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
             printf("[SERVER TCP] SEND_NEWS\n");
 
             // check if topic exists
-            if (get_noticia(noticia_list, atoi(param)) == NULL)
+            if (get_noticia(atoi(param)) == NULL)
             {
                 printf("[SERVER TCP] Topic does not exist\n");
                 send(client_fd, "[ERROR] Topic does not exist!", 28, 0);
@@ -179,7 +211,7 @@ void process_client(int client_fd, struct NoticiaList *noticia_list, struct UsrL
     close(client_fd);
 }
 
-char *list_topics_str(struct NoticiaList *noticia_list)
+char *list_topics_str()
 {
     char *topics_str = malloc(sizeof(char) * BUF_SIZE);
     bzero(topics_str, BUF_SIZE);
@@ -194,7 +226,7 @@ char *list_topics_str(struct NoticiaList *noticia_list)
     return topics_str;
 }
 
-void tcp_server(int PORT_ADMIN, struct NoticiaList *noticia_list, struct UsrList *users_list)
+void tcp_server(int PORT_ADMIN)
 {
     int fd, client;
     struct sockaddr_in addr, client_addr;
@@ -226,10 +258,11 @@ void tcp_server(int PORT_ADMIN, struct NoticiaList *noticia_list, struct UsrList
         if (client > 0)
         {
             printf("[SERVER TCP] Client Connected\n");
+            update_users_list_from_file();
             if (fork() == 0)
             {
                 close(fd);
-                process_client(client, noticia_list, users_list);
+                process_client(client);
                 exit(0);
             }
             close(client);
@@ -237,7 +270,7 @@ void tcp_server(int PORT_ADMIN, struct NoticiaList *noticia_list, struct UsrList
     }
 }
 
-int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users_list)
+int udp_server(int PORT)
 {
     // server start:
     struct sockaddr_in si_minha, si_outra;
@@ -310,7 +343,7 @@ int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users
             password[strcspn(password, "\r\n")] = '\0'; // remove \r\n from buffer
 
             // check if user exists
-            if (check_valid_user_cred(users_list, username, password, 1) == 1)
+            if (check_valid_user_cred(username, password, 1) == 1)
             {
                 // send OK
                 printf("[SERVER UDP] AUTH OK\n");
@@ -379,7 +412,7 @@ int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users
                 password[strcspn(password, "\r\n")] = '\0'; // remove \r\n from buffer
 
                 // check if user exists
-                if (check_valid_user_cred(users_list, username, password, 1) == 1)
+                if (check_valid_user_cred(username, password, 1) == 1)
                 {
                     // send OK
                     printf("[SERVER UDP] AUTH OK\n");
@@ -412,17 +445,17 @@ int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users
             password = strtok(NULL, " ");
             type = strtok(NULL, " ");
 
-            if (type == NULL)
+            // check if password or type are null
+
+            if (username == NULL || password == NULL || type == NULL)
             {
-                type = malloc(1);
-                type[0] = '\0';
-            }
-            else
-            {
-                type[strlen(type)] = '\0';
+                printf("[CLIENT] Invalid command: %s\n", command);
+                // send error
+                sendto(s, "[ERROR] Invalid command!", 24, 0, (struct sockaddr *)&si_outra, slen);
+                continue;
             }
 
-            if (user_exists(username, users_list))
+            if (user_exists(username))
             {
                 printf("[CLIENT] User already exists!\n");
                 // send error
@@ -441,9 +474,14 @@ int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users
             user->type = malloc(strlen(type) + 1);
             strcpy(user->type, type);
 
-            append_user(users_list, user);
+            append_user(user);
 
-            save_to_file(users_list, noticia_list);
+            save_to_file();
+
+            // update the number of users
+            update_users_list_from_file();
+
+            // list_users();
 
             // send ok to client
             sendto(s, "OK", 3, 0, (struct sockaddr *)&si_outra, slen);
@@ -455,16 +493,17 @@ int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users
             // find \n and replace it with \0
             username[strlen(username)] = '\0';
 
-            if (!user_exists(username, users_list))
+            if (!user_exists(username))
             {
                 printf("User does not exist!\n");
                 sendto(s, "[ERROR] User does not exist!", 28, 0, (struct sockaddr *)&si_outra, slen);
                 continue;
             }
             printf("[CLIENT] Deleting User: %s\n", username);
-            delete_user(users_list, username);
+            delete_user(username);
 
-            save_to_file(users_list, noticia_list);
+            save_to_file();
+            update_users_list_from_file();
 
             // send to client OK
             sendto(s, "OK", 3, 0, (struct sockaddr *)&si_outra, slen);
@@ -513,11 +552,14 @@ int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users
     return 0;
 }
 
-void create_multicast_server(char *topicId, int PORT)
+void *create_multicast_server(void *arg)
 {
+    struct MCserver *mcServer = (struct MCserver *)arg;
+    char *topicId = mcServer->topicId;
+    char *multicastADDR = mcServer->address;
+    int PORT = mcServer->PORT;
+
     int fd;
-    struct sockaddr_in addr;
-    struct ip_mreq mreq;
     char buffer[BUFLEN];
 
     // Create a UDP socket
@@ -535,10 +577,12 @@ void create_multicast_server(char *topicId, int PORT)
         exit(1);
     }
 
+    struct sockaddr_in addr;
+
     // Bind the socket to the multicast address and port
     memset((char *)&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY); // localhost
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // localhost
     addr.sin_port = htons(PORT);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
@@ -547,25 +591,45 @@ void create_multicast_server(char *topicId, int PORT)
         exit(1);
     }
 
-    printf("[MULTICAST SERVER@%s] Server started with info: %s:%d - %d\n", topicId, inet_ntoa(addr.sin_addr), PORT, fd);
+    struct ip_mreq mreq;
+    // in localhost
+    mreq.imr_multiaddr.s_addr = inet_addr(multicastADDR);
+    // use DEFAULT interface
+    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 
-    // Receive and process incoming multicast messages
+    if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&mreq, sizeof(mreq)) < 0)
+    {
+        perror("setsockopt failed");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("[MULTICAST SERVER@%s] Server started with info %s:%d - MCGROUP:%s:%d\n",
+           topicId, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), multicastADDR, PORT);
+
     while (1)
     {
-        bzero(buffer, BUFLEN);
-        if (recvfrom(fd, buffer, BUFLEN, 0, NULL, 0) < 0)
-        {
-            perror("recvfrom");
-            exit(1);
-        }
-        printf("[MULTICAST@topic:%s] Received message: %s\n", topicId, buffer);
+        char buffer[1024];
+        struct sockaddr_in client_addr;
+        memset(buffer, 0, sizeof(buffer));
+        memset(&client_addr, 0, sizeof(client_addr));
+        socklen_t len = sizeof(client_addr);
 
-        // Process the received message
-        // Add your custom processing logic here
+        ssize_t num_bytes = recvfrom(fd, buffer, sizeof(buffer), 0,
+                                     (struct sockaddr *)&client_addr, &len);
+        if (num_bytes < 0)
+        {
+            perror("recvfrom failed");
+            exit(EXIT_FAILURE);
+        }
+
+        printf("Received message from %s:%d: %s\n",
+               inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), buffer);
+        // Process the received message here
     }
 
     // Cleanup and close the socket
     close(fd);
+    pthread_exit(NULL);
 }
 
 // TODO: DOESNT WORK
@@ -603,7 +667,7 @@ int get_number_of_users()
     return 0;
 }
 
-int get_users_size(struct UsrList *users_list)
+int get_users_size()
 {
     int i = 0;
     struct UsrList *aux = users_list;
@@ -615,7 +679,7 @@ int get_users_size(struct UsrList *users_list)
     return i;
 }
 
-int get_noticia_size(struct NoticiaList *noticia_list)
+int get_noticia_size()
 {
     int i = 0;
     struct NoticiaList *aux = noticia_list;
@@ -627,7 +691,7 @@ int get_noticia_size(struct NoticiaList *noticia_list)
     return i;
 }
 
-void append_user(struct UsrList *users_list, struct NormalUser *user)
+void append_user(struct NormalUser *user)
 {
     struct UsrList *aux = users_list;
     while (aux->next != NULL)
@@ -641,7 +705,7 @@ void append_user(struct UsrList *users_list, struct NormalUser *user)
     aux->next->next = NULL;
 }
 
-struct Noticia *get_noticia(struct NoticiaList *noticia_list, int index)
+struct Noticia *get_noticia(int index)
 {
     int i = 0;
     struct NoticiaList *aux = noticia_list;
@@ -657,7 +721,7 @@ struct Noticia *get_noticia(struct NoticiaList *noticia_list, int index)
     return NULL;
 }
 
-struct NormalUser *get_user(struct UsrList *users_list, int index)
+struct NormalUser *get_user(int index)
 {
     int i = 0;
     struct UsrList *aux = users_list;
@@ -673,7 +737,7 @@ struct NormalUser *get_user(struct UsrList *users_list, int index)
     return NULL;
 }
 
-char *get_user_type(struct UsrList *users_list, char *username)
+char *get_user_type(char *username)
 {
     // printf("Checking if user exists: %s\n", username);
     struct UsrList *aux = users_list->next;
@@ -689,7 +753,7 @@ char *get_user_type(struct UsrList *users_list, char *username)
     return NULL;
 }
 
-void append_noticia(struct NoticiaList *noticia_list, struct Noticia *Noticia)
+void append_noticia(struct Noticia *Noticia)
 {
     struct NoticiaList *new_noticia = malloc(sizeof(struct NoticiaList));
     new_noticia->Noticia = Noticia;
@@ -710,7 +774,7 @@ void append_noticia(struct NoticiaList *noticia_list, struct Noticia *Noticia)
     }
 }
 
-int user_exists(char *username, struct UsrList *users_list)
+int user_exists(char *username)
 {
     // printf("Checking if user exists: %s\n", username);
 
@@ -736,7 +800,7 @@ void refresh_time(char *segundos)
     printf("Refresh time set to %d seconds\n", REFRESH_TIME);
 }
 
-void delete_user(struct UsrList *users_list, char *username)
+void delete_user(char *username)
 {
     struct UsrList *aux = users_list;
     while (aux->next != NULL)
@@ -752,7 +816,7 @@ void delete_user(struct UsrList *users_list, char *username)
     }
 }
 
-void list_users(struct UsrList *users_list)
+void list_users()
 {
     struct UsrList *aux = users_list->next;
     while (aux != NULL)
@@ -762,7 +826,7 @@ void list_users(struct UsrList *users_list)
     }
 }
 
-char *list_users_str(struct UsrList *users_list)
+char *list_users_str()
 {
     struct UsrList *aux = users_list->next;
     char *result = NULL;    // Pointer to store the result string
@@ -790,7 +854,7 @@ char *list_users_str(struct UsrList *users_list)
     return result;
 }
 
-void list_topics(struct NoticiaList *noticia_list)
+void list_topics()
 {
     struct NoticiaList *aux = noticia_list->next;
     while (aux != NULL)
@@ -800,7 +864,7 @@ void list_topics(struct NoticiaList *noticia_list)
     }
 }
 
-int get_users_lenght(struct UsrList *users_list)
+int get_users_lenght()
 {
     int i = 0;
     struct UsrList *aux = users_list->next;
@@ -812,7 +876,7 @@ int get_users_lenght(struct UsrList *users_list)
     return i;
 }
 
-int check_valid_user_cred(struct UsrList *users_list, char *username, char *password, int needsToBeAdmin)
+int check_valid_user_cred(char *username, char *password, int needsToBeAdmin)
 {
     // list_users(users_list);
 
@@ -820,15 +884,16 @@ int check_valid_user_cred(struct UsrList *users_list, char *username, char *pass
     while (aux != NULL)
     {
 
-        /*  printf("Username: %s %s\n", aux->user->name, username);
-         printf("Password: %s %s\n", aux->user->password, password);
+        /*
+        printf("Username: %s %s\n", aux->user->name, username);
+        printf("Password: %s %s\n", aux->user->password, password);
 
-         printf("username: %d\n", strcmp(aux->user->name, username));
-         printf("password: %d\n", strcmp(aux->user->password, password));
+        printf("username: %d\n", strcmp(aux->user->name, username));
+        printf("password: %d\n", strcmp(aux->user->password, password));
 
-         printf("Needs to be admin: %d\n", needsToBeAdmin);
-         printf("admin: %d\n", strcmp(aux->user->type, "administrador")); */
-
+        printf("Needs to be admin: %d\n", needsToBeAdmin);
+        printf("admin: %d\n", strcmp(aux->user->type, "administrador"));
+        */
         if (strcmp(aux->user->name, username) == 0 && strcmp(aux->user->password, password) == 0)
         {
             if (needsToBeAdmin == 1)
@@ -848,7 +913,7 @@ int check_valid_user_cred(struct UsrList *users_list, char *username, char *pass
     return 0;
 }
 
-void save_to_file(struct UsrList *users_list, struct NoticiaList *noticia_list)
+void save_to_file()
 {
     // check if database has something inside, if it does delete it
 
@@ -907,12 +972,93 @@ void save_to_file(struct UsrList *users_list, struct NoticiaList *noticia_list)
     fclose(fp);
 }
 
-void append_multicast_server(struct MulticastServerList *multi_server_list, struct MCserver *multi_server)
+void update_users_list_from_file()
+{
+    // update the global variable users_list from the users in the database.txt file
+    FILE *fp = fopen("database.txt", "r");
+
+    int initial_users_number = 0;
+    char line[256];
+    int i = 0;
+    while (fgets(line, sizeof(line), fp))
+    {
+        // if you fget only \n
+        if (line[0] == '\n')
+        {
+            continue;
+        }
+
+        if (i == 0)
+        {
+            // read line
+            initial_users_number = atoi(line);
+
+            // check if greater than 10, if it is throw errr
+            if (initial_users_number > 10)
+            {
+                printf("Error: The number of users is greater than 10\n");
+                return;
+            }
+        }
+        else if (i >= 1 && i <= initial_users_number)
+        {
+            int len = get_users_size(users_list);
+            if (len >= 10)
+            {
+                printf("Error: The number of users is greater than 10\n");
+                return;
+            }
+
+            // user: User1;pass1;(administrador/cliente/jornalista)
+            char *name = strtok(line, ";");
+            char *pass = strtok(NULL, ";");
+            char *type = strtok(NULL, "\n");
+
+            // read line
+            struct NormalUser *user = malloc(sizeof(struct NormalUser));
+            user->name = malloc(strlen(name) + 1);
+            strcpy(user->name, name);
+
+            user->password = malloc(strlen(pass) + 1);
+            strcpy(user->password, pass);
+
+            // remove the \n from the end of type
+            type[strcspn(type, "\r\n")] = '\0';
+
+            // check if type has the correct format
+            if (strcmp(type, "administrador") != 0 && strcmp(type, "cliente") != 0 && strcmp(type, "jornalista") != 0)
+            {
+                printf("Error: The type of user is not valid\n");
+                return;
+            }
+
+            user->type = malloc(strlen(type) + 1);
+            strcpy(user->type, type);
+
+            // append to the list from the global variable
+            struct UsrList *aux = users_list->next;
+            while (aux->next != NULL)
+            {
+                aux = aux->next;
+            }
+            aux->next = malloc(sizeof(struct UsrList));
+            aux->next->user = user;
+            aux->next->next = NULL;
+
+            // update users_list with the new user, copy the memory from *aux, which is the new global variable from the list of users into the global variable users_list
+            memcpy(users_list, aux, sizeof(struct UsrList)* (len + 1));
+            printf("User %s added\n", user->name);
+            list_users();
+        }
+    }
+}
+
+void append_multicast_server(struct MCserver *multi_server)
 {
     struct MulticastServerList *new_multi_server = malloc(sizeof(struct MulticastServerList));
     new_multi_server->server = multi_server;
     new_multi_server->next = NULL;
-    
+
     if (multi_server_list->next == NULL)
     {
         multi_server_list->next = new_multi_server;
@@ -927,6 +1073,43 @@ void append_multicast_server(struct MulticastServerList *multi_server_list, stru
         aux->next = new_multi_server;
     }
 
-    printf("[SERVER UDP] Multicast server added: %d:%s\n", multi_server->pid, multi_server->topicId);
+    printf("[SERVER UDP] Multicast server added: %s - %s:%d\n", multi_server->topicId, multi_server->address, multi_server->PORT);
+}
 
+char *generate_multicast_address(struct MulticastServerList *multicast_list)
+{
+    struct MulticastServerList *current = multicast_list;
+    char *address = malloc(16);
+
+    while (current != NULL)
+    {
+        struct MCserver *server = current->server;
+
+        // Check if the server has an assigned address
+        if (server->address != NULL)
+        {
+            strncpy(address, server->address, 16);
+            char *lastByte = strrchr(address, '.');
+
+            if (lastByte != NULL)
+            {
+                // Extract the last byte of the address
+                int lastValue = atoi(lastByte + 1);
+
+                // Increment the last byte by 1
+                lastValue = (lastValue + 1) % 256;
+
+                // Update the last byte in the address
+                sprintf(lastByte + 1, "%d", lastValue);
+            }
+
+            return address;
+        }
+
+        current = current->next;
+    }
+
+    // Assign the initial multicast address (224.0.0.1) if no previous address is found
+    strncpy(address, "224.0.0.1", 16);
+    return address;
 }

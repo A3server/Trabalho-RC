@@ -12,8 +12,6 @@
 
 void erro(char *msg);
 
-// q: this program is using tcp or udp?
-// a:
 int main(int argc, char *argv[])
 {
   char endServer[100];
@@ -36,6 +34,7 @@ int main(int argc, char *argv[])
   addr.sin_addr.s_addr = ((struct in_addr *)(hostPtr->h_addr))->s_addr;
   addr.sin_port = htons((short)atoi(argv[2]));
 
+  // TCP connection
   if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     erro("socket");
 
@@ -103,15 +102,18 @@ int main(int argc, char *argv[])
       type = malloc(strlen(aux_type) + 1);
       strcpy(type, aux_type);
 
-      if (strcmp(type, "jornalista") == 0 || strcmp(type, "cliente") == 0)
+      if (strcmp(type, "jornalista") == 0 || strcmp(type, "cliente") == 0 || strcmp(type, "administrador") == 0)
       {
         break;
       }
-      printf("Authentication failed, wrong user type, got: %s\nPlease try again:\n", type);
+      else
+      {
+        printf("Authentication failed, Please try again:\n");
+      }
     }
 
     printf("Welcome %s - %s\n", type, username);
-    if (strcmp(type, "cliente") == 0)
+    if (strcmp(type, "cliente") == 0 || strcmp(type, "administrador") == 0)
     {
       printf("Available Commands:\n  - LIST_TOPICS\n  - SUBSCRIBE_TOPIC <topic id>\nserver@%s$ ", type);
 
@@ -122,7 +124,7 @@ int main(int argc, char *argv[])
         fgets(buffer, BUFLEN, stdin);
         buffer[strcspn(buffer, "\r\n")] = '\0';
 
-        printf("SUBSCRIBE_TOPIC: %d\n", strncmp(buffer, "SUBSCRIBE_TOPIC", 15));
+        // printf("SUBSCRIBE_TOPIC: %d\n", strncmp(buffer, "SUBSCRIBE_TOPIC", 15));
 
         // check if we wrote any commands above
         if (strcmp(buffer, "LIST_TOPICS") == 0)
@@ -144,12 +146,48 @@ int main(int argc, char *argv[])
           // check if we wrote SUBSCRIBE_TOPIC with a topic id
           char *token = strtok(buffer, " ");
           token = strtok(NULL, " ");
+          // printf("token: %s\n", token);
           if (token == NULL)
           {
             printf("Error: Invalid command\nserver@%s$ ", type);
             continue;
           }
-          // connect to the multicast server HERE
+
+          // CREATE A STRING composedby "SUBSCRIBE_TOPIC <topic id>"
+          char b[BUFLEN];
+          bzero(b, BUFLEN);
+          strcat(b, "SUBSCRIBE_TOPIC ");
+          strcat(b, token);
+          strcpy(buffer, b);
+
+          // SENT TO THE SERVER THE COMMAND "SUBSCRIBE_TOPIC <topic id>"
+          n = write(fd, buffer, strlen(buffer));
+          if (n < 0)
+            erro("ERROR writing to socket");
+
+          // wait for server to send data
+          bzero(buffer, BUFLEN);
+          n = read(fd, buffer, BUFLEN);
+          if (n < 0)
+            erro("ERROR reading from socket");
+
+
+          // check if message starts with [ERROR]
+          if (strncmp(buffer, "[ERROR]", 7) == 0)
+          {
+            printf("%s\nserver@%s$ ", buffer, type);
+            continue;
+          }
+          printf("%s\n", buffer);
+
+          // connect to the socket msg is like this: "PORT;IP"
+          char *token2 = strtok(buffer, ";");
+          char *port = strtok(NULL, ";");
+          char *ip = strtok(NULL, ";");
+
+          printf("port: %s\n", port);
+          printf("ip: %s\n", ip);
+
 
 
         }
@@ -176,22 +214,6 @@ int main(int argc, char *argv[])
 
   close(fd);
   exit(0);
-}
-
-void join_multicast_sv(char *multicastAddr)
-{
-
-  int fd;
-  struct ip_mreq mreq;
-
-  // Join the multicast group
-  mreq.imr_multiaddr.s_addr = inet_addr(multicastAddr);
-  mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-  if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0)
-  {
-    perror("setsockopt");
-    exit(1);
-  }
 }
 
 void erro(char *msg)

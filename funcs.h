@@ -5,6 +5,8 @@
 #define MAX_COMMAND_LENGTH 50
 #define BUFLEN 512
 #define BUF_SIZE	1024
+#define PORT_MC 8888
+
 #include <errno.h>
 #include "funcs.h"
 #include <stdio.h>
@@ -16,7 +18,7 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <sys/shm.h>
-
+#include <pthread.h>
 
 struct NormalUser
 {
@@ -47,32 +49,38 @@ struct MulticastServerList {
 };
 
 struct MCserver {
-    pid_t pid;
+    int PORT;
+    char *address;
     char *topicId;
 };
 
+struct UsrList *users_list;
+struct MulticastServerList *multi_server_list;
+struct NoticiaList *noticia_list;
 
-int check_valid_user_cred(struct UsrList *users_list, char *username, char *password, int needsToBeAdmin);
-int udp_server(int PORT, struct NoticiaList *noticia_list, struct UsrList *users_list);
-void tcp_server(int PORT_ADMIN, struct NoticiaList *noticia_list, struct UsrList *users_list);
+
+int check_valid_user_cred(char *username, char *password, int needsToBeAdmin);
+int udp_server(int PORT);
+void tcp_server(int PORT_ADMIN);
 void killServers();
-void create_multicast_server(char* topicId, int PORT);
-void append_multicast_server(struct MulticastServerList *multi_server_list, struct MCserver *multi_server);
+void* create_multicast_server(void* arg);
+void append_multicast_server(struct MCserver *multi_server);
 void erro(char *msg);
-void delete_user(struct UsrList *users_list, char *username);
-void list_users(struct UsrList *users_list);
-char* list_users_str(struct UsrList* users_list);
-void list_topics(struct NoticiaList *noticia_list);
-char *list_topics_str(struct NoticiaList *noticia_list);
+void delete_user(char *username);
+void list_users();
+char* list_users_str();
+void list_topics();
+char *list_topics_str();
 void refresh_time(char *segundos);
-int user_exists(char *username, struct UsrList *users_list);
-void append_user(struct UsrList *users_list, struct NormalUser *user);
-void append_noticia(struct NoticiaList *noticia_list, struct Noticia *Noticia);
-int get_users_size(struct UsrList *users_list);
-char* get_user_type(struct UsrList *users_list, char* username);
-int get_noticia_size(struct NoticiaList *noticia_list);
-struct NormalUser *get_user(struct UsrList *users_list, int index);
-struct Noticia *get_noticia(struct NoticiaList *noticia_list, int index);
-void save_to_file(struct UsrList *users_list, struct NoticiaList *noticia_list);
-void write_users_tofile(struct UsrList *users_list);
+int user_exists(char *username);
+void append_user(struct NormalUser *user);
+void append_noticia(struct Noticia *Noticia);
+int get_users_size();
+char* get_user_type(char* username);
+int get_noticia_size();
+struct NormalUser *get_user(int index);
+struct Noticia *get_noticia(int index);
+void save_to_file();
+void update_users_list_from_file();
+char* generate_multicast_address();
 #endif // FOO_H
