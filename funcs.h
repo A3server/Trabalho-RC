@@ -59,6 +59,7 @@ struct MulticastServerList *multi_server_list;
 struct NoticiaList *noticia_list;
 
 
+void list_multicast_servers();
 int check_valid_user_cred(char *username, char *password, int needsToBeAdmin);
 int udp_server(int PORT);
 void tcp_server(int PORT_ADMIN);

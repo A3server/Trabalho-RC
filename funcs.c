@@ -115,39 +115,38 @@ void process_client(int client_fd)
             printf("[SERVER TCP] SUBSCRIBE_TOPIC:%s\n", param);
             // TODO check if topic exists and connect to the multicast server corresponding to it
 
-            // recieved SUBSCRIBE_TOPIC <topic id>
-
-            // GET THE TOPIC ID
-            char *topicId = param;
-
             // check if topic exists
-            if (get_noticia(atoi(topicId)) == NULL)
+            if (get_noticia(atoi(param)) == NULL)
             {
                 printf("[SERVER TCP] Topic does not exist\n");
                 send(client_fd, "[ERROR] Topic does not exist!", 28, 0);
                 continue;
             }
 
+            list_multicast_servers();
+
             // send multicast server info
             struct MulticastServerList *current = multi_server_list->next;
             while (current != NULL)
             {
                 printf("[SERVER TCP] Current topic: %s\n", current->server->topicId);
-                printf("[SERVER TCP] Topic id: %s\n", topicId);
-                if (strcmp(current->server->topicId, topicId) == 0)
+                printf("[SERVER TCP] Topic id: %s\n", param);
+                if (strcmp(current->server->topicId, param) == 0)
                 {
                     char *message = malloc(sizeof(char) * BUF_SIZE);
-                    sprintf(message, "%s;%d", current->server->address, current->server->PORT);
+                    sprintf(message, "%s %d", current->server->address, current->server->PORT);
+                    printf("Sent Server Info: %s\n", message);
                     send(client_fd, message, strlen(message), 0);
                     break;
                 }
                 current = current->next;
             }
+            
         }
         else if (strcmp(command, "CREATE_TOPIC") == 0)
         {
             // todo, n testei esta merda, ve se faz sentido.
-            // @miguelopesantana
+            // @miguelopesantanax
 
             // check if user is jornalista
             /* if (strcmp(get_user_type(username), "jornalista") != 0)
@@ -199,6 +198,8 @@ void process_client(int client_fd)
                 continue;
             }
             // todo send news to the multicast server
+            
+
         }
         else
         {
@@ -1070,10 +1071,36 @@ void append_multicast_server(struct MCserver *multi_server)
         {
             aux = aux->next;
         }
+        // malloc the next one
         aux->next = new_multi_server;
     }
 
     printf("[SERVER UDP] Multicast server added: %s - %s:%d\n", multi_server->topicId, multi_server->address, multi_server->PORT);
+}
+
+void list_multicast_servers()
+{
+    printf("[SERVER UDP] Multicast servers:\n");
+    struct MulticastServerList *aux = multi_server_list->next;
+    while (aux != NULL)
+    {
+        printf("[MULTICAST] %s - %s:%d\n", aux->server->topicId, aux->server->address, aux->server->PORT);
+        aux = aux->next;
+    }
+}
+
+struct MCserver *get_multicast_server(char *topicId)
+{
+    struct MulticastServerList *aux = multi_server_list->next;
+    while (aux != NULL)
+    {
+        if (strcmp(aux->server->topicId, topicId) == 0)
+        {
+            return aux->server;
+        }
+        aux = aux->next;
+    }
+    return NULL;
 }
 
 char *generate_multicast_address(struct MulticastServerList *multicast_list)

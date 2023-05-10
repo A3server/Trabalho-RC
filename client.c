@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
             continue;
           }
 
-          // CREATE A STRING composedby "SUBSCRIBE_TOPIC <topic id>"
+          // CREATE A STRING composed by "SUBSCRIBE_TOPIC <topic id>"
           char b[BUFLEN];
           bzero(b, BUFLEN);
           strcat(b, "SUBSCRIBE_TOPIC ");
@@ -178,18 +178,39 @@ int main(int argc, char *argv[])
             printf("%s\nserver@%s$ ", buffer, type);
             continue;
           }
-          printf("%s\n", buffer);
-
+          printf("Recieved: %s\n", buffer);
+    
           // connect to the socket msg is like this: "PORT;IP"
-          char *token2 = strtok(buffer, ";");
-          char *port = strtok(NULL, ";");
-          char *ip = strtok(NULL, ";");
+          char *port = strtok(buffer, " ");
+          char *ip = strtok(NULL, " ");
 
           printf("port: %s\n", port);
           printf("ip: %s\n", ip);
 
 
+          // create a UDP connection to the server
+          struct sockaddr_in addr;
+          struct hostent *hostPtr;
 
+          if ((hostPtr = gethostbyname(ip)) == 0)
+            erro("Não consegui obter endereço");
+
+          bzero((void *)&addr, sizeof(addr));
+          addr.sin_family = AF_INET;
+          addr.sin_addr.s_addr = ((struct in_addr *)(hostPtr->h_addr))->s_addr;
+          addr.sin_port = htons((short)atoi(port));
+
+          // UDP connection
+          int fd_udp;
+          if ((fd_udp = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+            erro("socket");
+
+          if (connect(fd_udp, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+          {
+            perror("connect");
+          }
+
+          printf("Listening to multicast server...\n");
         }
         else
         {
@@ -209,6 +230,8 @@ int main(int argc, char *argv[])
       // TODO: no server ja dei uns tabs do copilot, ve se aquela merda faz sentido
 
       // faz o comando CREATE_TOPIC agora, é só escrever e criar o multicast server, está por ai o codigo
+
+      printf("Available Commands:\n  - CREATE_TOPIC <topic id> <topic title>\nserver@%s$ ", type);
     }
   }
 

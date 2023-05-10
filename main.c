@@ -150,6 +150,7 @@ int main(int argc, char *argv[])
     pthread_t threads[get_noticia_size()];
 
     i = 0;
+    // create a thread for each multicast server
     while (aux != NULL)
     {
         int currentport = PORT_MC + i;
@@ -180,6 +181,9 @@ int main(int argc, char *argv[])
             printf("Error creating thread\n");
             exit(-1);
         }
+
+        // let me see the pids of each array
+        // printf("Thread %d created with pid: %ld\n", i, threads[i]);
 
         aux = aux->next;
         free(topicId);
