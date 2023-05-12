@@ -18,11 +18,6 @@
     ▪ QUIT_SERVER
 */
 
-pid_t mainPID;
-pid_t tcpServerPID;
-pid_t udpServerPID;
-int shmid;
-
 int main(int argc, char *argv[])
 {
     if (argc != 4)
@@ -147,7 +142,6 @@ int main(int argc, char *argv[])
     // create a list to save the pids of the multicast servers
     struct NoticiaList *aux = noticia_list->next;
     // create a list of threads that contain the multicast servers
-    pthread_t threads[get_noticia_size()];
 
     i = 0;
     // create a thread for each multicast server

@@ -58,6 +58,12 @@ struct UsrList *users_list;
 struct MulticastServerList *multi_server_list;
 struct NoticiaList *noticia_list;
 
+pid_t mainPID;
+pid_t tcpServerPID;
+pid_t udpServerPID;
+int shmid;
+
+pthread_t threads[100];
 
 void list_multicast_servers();
 int check_valid_user_cred(char *username, char *password, int needsToBeAdmin);

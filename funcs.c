@@ -15,6 +15,7 @@ extern int shmid;
 extern struct UsrList *users_list;
 extern struct MulticastServerList *multi_server_list;
 extern struct NoticiaList *noticia_list;
+extern pthread_t threads[100];
 
 void process_client(int client_fd)
 {
@@ -129,13 +130,13 @@ void process_client(int client_fd)
             struct MulticastServerList *current = multi_server_list->next;
             while (current != NULL)
             {
-                printf("[SERVER TCP] Current topic: %s\n", current->server->topicId);
-                printf("[SERVER TCP] Topic id: %s\n", param);
+                // printf("[SERVER TCP] Current topic: %s\n", current->server->topicId);
+                // printf("[SERVER TCP] Topic id: %s\n", param);
                 if (strcmp(current->server->topicId, param) == 0)
                 {
                     char *message = malloc(sizeof(char) * BUF_SIZE);
                     sprintf(message, "%s %d", current->server->address, current->server->PORT);
-                    printf("Sent Server Info: %s\n", message);
+                    printf("[SERVER TCP] Sent Server Info: %s\n", message);
                     send(client_fd, message, strlen(message), 0);
                     break;
                 }
@@ -145,18 +146,9 @@ void process_client(int client_fd)
         }
         else if (strcmp(command, "CREATE_TOPIC") == 0)
         {
-            // todo, n testei esta merda, ve se faz sentido.
-            // @miguelopesantanax
+            char *title = strtok(NULL, " ");
 
-            // check if user is jornalista
-            /* if (strcmp(get_user_type(username), "jornalista") != 0)
-            {
-                printf("[SERVER TCP] User is not jornalista\n");
-                send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
-                continue;
-            } */
-
-            printf("[SERVER TCP] CREATE_TOPIC\n");
+            printf("[SERVER TCP] CREATE_TOPIC:%s\n", param);
 
             // check if topic exists
             if (get_noticia(atoi(param)) != NULL)
@@ -165,30 +157,49 @@ void process_client(int client_fd)
                 send(client_fd, "[ERROR] Topic already exists!", 28, 0);
                 continue;
             }
+
+
             // create topic
             struct Noticia *noticia = malloc(sizeof(struct Noticia));
             noticia->id = malloc(strlen(param) + 1);
             strcpy(noticia->id, param);
-            noticia->titulo = malloc(strlen(param) + 1);
-            strcpy(noticia->titulo, param);
+            noticia->titulo = malloc(strlen(title) + 1);
+            strcpy(noticia->titulo, title);
             append_noticia(noticia);
             printf("[SERVER TCP] Topic created\n");
 
+            // needs to start a new multicast server
+            struct MCserver *multi_server = malloc(sizeof(struct MCserver));
+            int noticia_size = get_noticia_size();
+            multi_server->PORT = PORT_MC + noticia_size;
+            multi_server->address = malloc(17);
+            multi_server->topicId = malloc(strlen(param) + 1);
+            strcpy(multi_server->address, generate_multicast_address(multi_server_list));
+            strcpy(multi_server->topicId, param);
+
+            // append to the list
+            append_multicast_server(multi_server);
+
+            // create a thread for the multicast server
+            if (pthread_create(&threads[noticia_size], NULL, create_multicast_server, (void *)multi_server) != 0)
+            {
+                printf("Error creating thread\n");
+                send(client_fd, "[ERROR] Error creating thread!", 28, 0);
+                exit(1);
+            }
+
+            // send multicast server info
+            char *message = malloc(sizeof(char) * BUF_SIZE);
+            sprintf(message, "%s %d", multi_server->address, multi_server->PORT);
+            // printf("[SERVER TCP]Sent Server Info: %s\n", message);
+            send(client_fd, message, strlen(message), 0);
+
             // write to file
             save_to_file();
-            send(client_fd, "OK", 3, 0);
         }
         else if (strcmp(command, "SEND_NEWS") == 0)
         {
-            // check if user is jornalista
-            if (strcmp(get_user_type(username), "jornalista") != 0)
-            {
-                printf("[SERVER TCP] User is not jornalista\n");
-                send(client_fd, "[ERROR] User is not jornalista!", 30, 0);
-                continue;
-            }
-
-            printf("[SERVER TCP] SEND_NEWS\n");
+            // printf("[SERVER TCP] SEND_NEWS\n");
 
             // check if topic exists
             if (get_noticia(atoi(param)) == NULL)
@@ -197,8 +208,23 @@ void process_client(int client_fd)
                 send(client_fd, "[ERROR] Topic does not exist!", 28, 0);
                 continue;
             }
-            // todo send news to the multicast server
             
+            // send multicast server info
+            struct MulticastServerList *current = multi_server_list->next;
+            while (current != NULL)
+            {
+                //printf("[SERVER TCP] Current topic: %s\n", current->server->topicId);
+                //printf("[SERVER TCP] Topic id: %s\n", param);
+                if (strcmp(current->server->topicId, param) == 0)
+                {
+                    char *message = malloc(sizeof(char) * BUF_SIZE);
+                    sprintf(message, "%s %d", current->server->address, current->server->PORT);
+                    printf("[SERVER TCP] Sent Server Info: %s\n", message);
+                    send(client_fd, message, strlen(message), 0);
+                    break;
+                }
+                current = current->next;
+            }
 
         }
         else
@@ -583,7 +609,7 @@ void *create_multicast_server(void *arg)
     // Bind the socket to the multicast address and port
     memset((char *)&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // localhost
+    addr.sin_addr.s_addr = htonl(INADDR_ANY); // localhost  
     addr.sin_port = htons(PORT);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
@@ -623,11 +649,13 @@ void *create_multicast_server(void *arg)
             exit(EXIT_FAILURE);
         }
 
-        printf("Received message from %s:%d: %s\n",
+        buffer[num_bytes] = '\0';
+
+        printf("[SERVER-LISTENING-MULTICAST:%s] Received message from %s:%d: %s\n", topicId,
                inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), buffer);
         // Process the received message here
     }
-
+    printf("[SERVER-LISTENING-MULTICAST:%s] Server closed\n", topicId);
     // Cleanup and close the socket
     close(fd);
     pthread_exit(NULL);
