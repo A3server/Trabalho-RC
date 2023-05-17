@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
 
           printf("Trying to connect to server multicast @ %s:%s\n", ip, port);
 
-         // connect to the multicast server
+          // connect to the multicast server
           int fd_udp;
 
           if ((fd_udp = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
@@ -299,15 +299,7 @@ int main(int argc, char *argv[])
           if (n < 0)
             erro("ERROR reading from socket");
 
-          char *token = strtok(buffer, " ");
-          if (strcmp(token, "[ERROR]") == 0)
-          {
-            printf("%s\nserver@%s$ ", buffer, type);
-            continue;
-          }
-          char *port = strtok(NULL, " ");
-
-          printf("Added topic!\nListen on:%s:%s\n", token, port);
+          printf("Recieved: %s\n", buffer);
         }
         else if (strcmp(command, "SEND_NEWS") == 0)
         {

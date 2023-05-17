@@ -168,34 +168,10 @@ void process_client(int client_fd)
             append_noticia(noticia);
             printf("[SERVER TCP] Topic created\n");
 
-            // needs to start a new multicast server
-            struct MCserver *multi_server = malloc(sizeof(struct MCserver));
-            int noticia_size = get_noticia_size();
-            multi_server->PORT = PORT_MC + noticia_size;
-            multi_server->address = malloc(17);
-            multi_server->topicId = malloc(strlen(param) + 1);
-            strcpy(multi_server->address, generate_multicast_address(multi_server_list));
-            strcpy(multi_server->topicId, param);
-
-            // append to the list
-            append_multicast_server(multi_server);
-
-            // create a thread for the multicast server
-            if (pthread_create(&threads[noticia_size], NULL, create_multicast_server, (void *)multi_server) != 0)
-            {
-                printf("Error creating thread\n");
-                send(client_fd, "[ERROR] Error creating thread!", 28, 0);
-                exit(1);
-            }
-
-            // send multicast server info
-            char *message = malloc(sizeof(char) * BUF_SIZE);
-            sprintf(message, "%s %d", multi_server->address, multi_server->PORT);
-            // printf("[SERVER TCP]Sent Server Info: %s\n", message);
-            send(client_fd, message, strlen(message), 0);
-
-            // write to file
             save_to_file();
+
+            // send OK
+            send(client_fd, "OK", 3, 0);
         }
         else if (strcmp(command, "SEND_NEWS") == 0)
         {
@@ -985,7 +961,7 @@ void save_to_file()
         aux2 = aux2->next;
     }
     // add \0 at the end of toprint
-    strcat(toprint, "\0");
+    strcat(toprint, "\n\0");
 
     // for each char in toprint, put in database.txt
     int i = 0;

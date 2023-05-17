@@ -1,8 +1,11 @@
-4
+5
 User1;pass1;cliente
 User2;pass2;administrador
 User3;pass3;jornalista
-User4;pass4;cliente
+cliente;cliente;cliente
+User4;pass4;administrador
 1;desporto
 2;tempo
 3;crypto
+4;djkasjd
+5;dkajsd
